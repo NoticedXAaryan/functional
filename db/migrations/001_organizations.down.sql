@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS organizations;
+DROP EXTENSION IF EXISTS postgis;
+DROP EXTENSION IF EXISTS "uuid-ossp";

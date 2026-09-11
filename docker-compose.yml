@@ -1,0 +1,85 @@
+services:
+  # ── PostgreSQL 16 with PostGIS ─────────────────────────────────────────
+  postgres:
+    image: postgis/postgis:16-3.4-alpine
+    container_name: balsuraksha-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: balsuraksha
+      POSTGRES_PASSWORD: balsuraksha
+      POSTGRES_DB: balsuraksha
+    ports:
+      - "5454:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U balsuraksha -d balsuraksha"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # ── Redis (optional — rate limiting / temp state) ──────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: balsuraksha-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── Go API server ─────────────────────────────────────────────────────
+  api:
+    build:
+      context: ./services/api
+      dockerfile: ../../infra/docker/api.Dockerfile
+    container_name: balsuraksha-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      # Mount source for hot-reload via air (dev only)
+      - ./services/api:/app
+      - go_cache:/root/.cache/go-build
+      - go_mod_cache:/go/pkg/mod
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ── Go background worker ───────────────────────────────────────────────
+  worker:
+    build:
+      context: ./services/worker
+      dockerfile: ../../infra/docker/worker.Dockerfile
+    container_name: balsuraksha-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    volumes:
+      - ./services/worker:/app
+      - go_cache:/root/.cache/go-build
+      - go_mod_cache:/go/pkg/mod
+
+volumes:
+  postgres_data:
+  go_cache:
+  go_mod_cache:

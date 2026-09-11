@@ -1,0 +1,53 @@
+# Bal Suraksha — .gitignore
+
+# Environment files (NEVER commit secrets)
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.json.credentials
+google-credentials*.json
+service-account*.json
+
+# Go
+services/api/vendor/
+services/worker/vendor/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+/tmp/
+
+# Node / Frontend
+node_modules/
+apps/web/node_modules/
+apps/ops/node_modules/
+packages/api-client/node_modules/
+apps/web/dist/
+apps/ops/dist/
+.pnp
+.pnp.js
+
+# Build artifacts
+apps/web/dist/
+apps/ops/dist/
+services/api/bin/
+services/worker/bin/
+
+# Test evidence (only sanitized evidence is committed)
+artifacts/evidence/raw/
+artifacts/evidence/private/
+
+# IDE / OS
+.vscode/settings.json
+.idea/
+*.DS_Store
+Thumbs.db
+
+# Air (Go hot-reload)
+.air/
+tmp/

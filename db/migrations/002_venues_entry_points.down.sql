@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS entry_points;
+DROP TABLE IF EXISTS venues;

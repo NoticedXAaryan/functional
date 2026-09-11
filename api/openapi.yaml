@@ -1,0 +1,1222 @@
+openapi: "3.1.0"
+info:
+  title: Bal Suraksha API
+  version: "0.1.0"
+  description: |
+    Private child-safety support platform. All endpoints enforce organization-scoped
+    authorization. Enums are fixed; unknown values are rejected server-side.
+  contact:
+    name: Bal Suraksha engineering
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Local development
+
+# ── Security schemes ────────────────────────────────────────────────────────
+components:
+  securitySchemes:
+    sessionToken:
+      type: http
+      scheme: bearer
+      description: Short-lived JWT issued on private session creation.
+    staffToken:
+      type: http
+      scheme: bearer
+      description: JWT issued on staff login (local stub for demo; OIDC in production).
+
+  # ── Shared error envelope ─────────────────────────────────────────────────
+  schemas:
+    ErrorEnvelope:
+      type: object
+      required: [error, code]
+      properties:
+        error:
+          type: string
+          description: Human-readable error message. Never contains private case content.
+        code:
+          type: string
+          description: Machine-readable error code.
+        request_id:
+          type: string
+
+    # ── Enums ─────────────────────────────────────────────────────────────
+    CaseStatus:
+      type: string
+      enum:
+        - RECEIVED
+        - TRIAGE
+        - ASSIGNED
+        - ACCEPTED
+        - IN_PROGRESS
+        - FOLLOW_UP
+        - CLOSED
+
+    AlertStatus:
+      type: string
+      enum:
+        - DRAFT
+        - IN_REVIEW
+        - APPROVED
+        - ACTIVE
+        - RESOLVED
+        - WITHDRAWN
+        - EXPIRED
+
+    NotificationMode:
+      type: string
+      enum:
+        - DISABLED
+        - TEST_ALLOWLIST
+        - LIVE
+
+    AppMode:
+      type: string
+      enum:
+        - demo
+        - beta
+        - production
+
+    # ── Entry points ──────────────────────────────────────────────────────
+    EntryPointResolution:
+      type: object
+      required: [id, venue_name, active, languages, emergency_numbers]
+      properties:
+        id:
+          type: string
+          format: uuid
+        venue_name:
+          type: string
+          description: Display name of the venue. Never the QR identifier.
+        active:
+          type: boolean
+        languages:
+          type: array
+          items:
+            type: string
+        service_hours:
+          type: string
+          nullable: true
+        routes_available:
+          type: array
+          items:
+            type: string
+            enum: [check_and_leave, ask_for_help, worried_about_someone, missing_child]
+        emergency_numbers:
+          type: object
+          properties:
+            national_emergency:
+              type: string
+              example: "112"
+            child_helpline:
+              type: string
+              example: "1098"
+
+    # ── Sessions ──────────────────────────────────────────────────────────
+    SessionCreateRequest:
+      type: object
+      required: [entry_point_id, mode]
+      properties:
+        entry_point_id:
+          type: string
+          format: uuid
+        mode:
+          type: string
+          enum: [one_time, with_return_access]
+        language:
+          type: string
+          default: en
+
+    SessionCreateResponse:
+      type: object
+      required: [session_token, expires_at]
+      properties:
+        session_token:
+          type: string
+          description: Short-lived JWT. Not the return secret.
+        expires_at:
+          type: string
+          format: date-time
+        return_secret_words:
+          type: array
+          items:
+            type: string
+          description: |
+            BIP-39 mnemonic words (4 words). Only present if mode=with_return_access.
+            Display clearly. Store only the hashed verifier server-side.
+            NEVER returned again after initial creation.
+          nullable: true
+
+    SessionAccessRequest:
+      type: object
+      required: [words]
+      properties:
+        words:
+          type: array
+          items:
+            type: string
+          minItems: 4
+          maxItems: 4
+
+    SessionAccessResponse:
+      type: object
+      required: [session_token, case_id]
+      properties:
+        session_token:
+          type: string
+        case_id:
+          type: string
+          format: uuid
+
+    # ── Assessment (AI) ───────────────────────────────────────────────────
+    AssessmentRequest:
+      type: object
+      required: [selected_text, language]
+      properties:
+        selected_text:
+          type: string
+          maxLength: 5000
+          description: Text selected by the user. Treated as untrusted data.
+        language:
+          type: string
+          description: IETF language tag, e.g. en, hi.
+
+    AssessmentResponse:
+      type: object
+      required: [status, human_help_available]
+      properties:
+        status:
+          type: string
+          enum: [ok, unavailable, unsupported_language, input_too_long]
+        human_help_available:
+          type: boolean
+          description: Always true. Human help path is never blocked by AI status.
+        observed_behaviors:
+          type: array
+          items:
+            type: string
+          description: Specific behaviors visible in the submitted text. Grounded only.
+          nullable: true
+        uncertainty_statement:
+          type: string
+          description: Explicit acknowledgement of context limits.
+          nullable: true
+        clarifying_questions:
+          type: array
+          items:
+            type: string
+          maxItems: 3
+          nullable: true
+        suggested_options:
+          type: array
+          items:
+            type: string
+          nullable: true
+        provider:
+          type: string
+          description: "stub | gemini-2.5-flash (or actual model used)"
+        is_simulated:
+          type: boolean
+
+    # ── Cases ─────────────────────────────────────────────────────────────
+    CaseCreateRequest:
+      type: object
+      required: [account_text]
+      properties:
+        account_text:
+          type: string
+          maxLength: 10000
+        safe_contact_preference:
+          $ref: "#/components/schemas/SafeContactPreference"
+        conflict_flag:
+          type: string
+          nullable: true
+          enum: [school_implicated, caregiver_implicated, staff_implicated]
+        optional_safe_contact:
+          type: string
+          nullable: true
+        route_type:
+          type: string
+          enum: [ask_for_help, worried_about_someone, missing_child]
+
+    SafeContactPreference:
+      type: object
+      properties:
+        safe_hours_start:
+          type: string
+          nullable: true
+        safe_hours_end:
+          type: string
+          nullable: true
+        preferred_channel:
+          type: string
+          enum: [message_in_app, no_contact]
+          nullable: true
+
+    CaseCreateResponse:
+      type: object
+      required: [case_id, receipt_id, status]
+      properties:
+        case_id:
+          type: string
+          format: uuid
+        receipt_id:
+          type: string
+          format: uuid
+        status:
+          $ref: "#/components/schemas/CaseStatus"
+        received_at:
+          type: string
+          format: date-time
+
+    CaseSafeView:
+      type: object
+      description: Child-visible view. Never includes staff notes or other reporter data.
+      required: [case_id, status, last_updated_at]
+      properties:
+        case_id:
+          type: string
+          format: uuid
+        status:
+          $ref: "#/components/schemas/CaseStatus"
+        last_updated_at:
+          type: string
+          format: date-time
+        safe_progress_message:
+          type: string
+          description: Plain-language status update safe for the child to read.
+          nullable: true
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/SafeMessageView"
+
+    SafeMessageView:
+      type: object
+      required: [id, body, sent_at, sender_role]
+      properties:
+        id:
+          type: string
+          format: uuid
+        body:
+          type: string
+        sent_at:
+          type: string
+          format: date-time
+        sender_role:
+          type: string
+          enum: [reporter, responder]
+
+    CaseStaffView:
+      type: object
+      description: Responder/staff view. Restricted to assigned organization.
+      required: [case_id, status, created_at, route_type]
+      properties:
+        case_id:
+          type: string
+          format: uuid
+        status:
+          $ref: "#/components/schemas/CaseStatus"
+        route_type:
+          type: string
+        conflict_flag:
+          type: string
+          nullable: true
+        account_text:
+          type: string
+        safe_contact_preference:
+          $ref: "#/components/schemas/SafeContactPreference"
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        assigned_to:
+          type: string
+          format: uuid
+          nullable: true
+        assignment_accepted_at:
+          type: string
+          format: date-time
+          nullable: true
+        version:
+          type: integer
+
+    # ── Assignments ───────────────────────────────────────────────────────
+    AssignmentCreateRequest:
+      type: object
+      required: [responder_id]
+      properties:
+        responder_id:
+          type: string
+          format: uuid
+
+    AssignmentAcceptRequest:
+      type: object
+      required: [case_version]
+      properties:
+        case_version:
+          type: integer
+          description: Optimistic lock version from case retrieval.
+
+    # ── Messages ──────────────────────────────────────────────────────────
+    MessageSendRequest:
+      type: object
+      required: [body]
+      properties:
+        body:
+          type: string
+          maxLength: 5000
+
+    # ── Alerts ────────────────────────────────────────────────────────────
+    AlertDraftRequest:
+      type: object
+      required: [case_id, description_text, issuer_name, coverage_polygon, expiry_at, tip_route_email]
+      properties:
+        case_id:
+          type: string
+          format: uuid
+        description_text:
+          type: string
+          maxLength: 500
+          description: Approved public description only. No private narrative.
+        issuer_name:
+          type: string
+        coverage_polygon:
+          type: object
+          description: GeoJSON Polygon defining the alert coverage area.
+        area_version:
+          type: string
+          description: Version of the geographic dataset used.
+        expiry_at:
+          type: string
+          format: date-time
+        tip_route_email:
+          type: string
+          format: email
+
+    AlertRevision:
+      type: object
+      required: [revision_id, alert_id, status, created_at]
+      properties:
+        revision_id:
+          type: string
+          format: uuid
+        alert_id:
+          type: string
+          format: uuid
+        status:
+          $ref: "#/components/schemas/AlertStatus"
+        description_text:
+          type: string
+        issuer_name:
+          type: string
+        coverage_polygon:
+          type: object
+        expiry_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        approved_by:
+          type: string
+          format: uuid
+          nullable: true
+        approved_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    AlertApprovalRequest:
+      type: object
+      required: [revision_id, decision]
+      properties:
+        revision_id:
+          type: string
+          format: uuid
+        decision:
+          type: string
+          enum: [approve, reject]
+        notes:
+          type: string
+          nullable: true
+
+    PublicAlertView:
+      type: object
+      description: |
+        Approved public projection only. No private case data, no sighting details,
+        no family phone numbers, no precise coordinates.
+      required: [alert_id, revision_id, status, description_text, issuer_name, expiry_at, current_status_url]
+      properties:
+        alert_id:
+          type: string
+          format: uuid
+        revision_id:
+          type: string
+          format: uuid
+        status:
+          $ref: "#/components/schemas/AlertStatus"
+        description_text:
+          type: string
+        issuer_name:
+          type: string
+        last_seen_area:
+          type: string
+          nullable: true
+        expiry_at:
+          type: string
+          format: date-time
+        issued_at:
+          type: string
+          format: date-time
+        tip_route_available:
+          type: boolean
+        current_status_url:
+          type: string
+          format: uri
+        is_test:
+          type: boolean
+          description: True in demo/TEST_ALLOWLIST mode. Label must be shown in UI.
+
+    # ── Subscriptions ─────────────────────────────────────────────────────
+    SubscriptionRequest:
+      type: object
+      required: [fcm_token, area_name, consent_confirmed]
+      properties:
+        fcm_token:
+          type: string
+          description: FCM registration token from browser.
+        area_name:
+          type: string
+        language:
+          type: string
+          default: en
+        consent_confirmed:
+          type: boolean
+          description: Must be true. User must have seen the consent explanation.
+
+    # ── Tips ─────────────────────────────────────────────────────────────
+    TipCreateRequest:
+      type: object
+      required: [alert_id, sighting_description]
+      properties:
+        alert_id:
+          type: string
+          format: uuid
+        sighting_description:
+          type: string
+          maxLength: 2000
+        approximate_location:
+          type: string
+          nullable: true
+        contact_preference:
+          type: string
+          nullable: true
+
+    TipCreateResponse:
+      type: object
+      required: [tip_receipt_id, received_at]
+      properties:
+        tip_receipt_id:
+          type: string
+          format: uuid
+        received_at:
+          type: string
+          format: date-time
+
+    # ── Health ────────────────────────────────────────────────────────────
+    HealthResponse:
+      type: object
+      required: [status, app_mode, notification_mode]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        app_mode:
+          $ref: "#/components/schemas/AppMode"
+        notification_mode:
+          $ref: "#/components/schemas/NotificationMode"
+        database:
+          type: string
+          enum: [ok, error]
+        worker:
+          type: string
+          enum: [ok, error, unknown]
+
+# ── Paths ────────────────────────────────────────────────────────────────────
+paths:
+
+  /healthz:
+    get:
+      operationId: getHealth
+      summary: Health check
+      tags: [system]
+      responses:
+        "200":
+          description: Service healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "503":
+          description: Service degraded
+
+  # Entry points
+  /entry-points/{opaque_id}:
+    get:
+      operationId: resolveEntryPoint
+      summary: Resolve a QR entry point
+      tags: [entry-points]
+      parameters:
+        - name: opaque_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Entry point resolved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntryPointResolution"
+        "404":
+          description: Unknown or revoked entry point (no private data disclosed)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  # Sessions
+  /sessions:
+    post:
+      operationId: createSession
+      summary: Start a private session
+      tags: [sessions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionCreateRequest"
+      responses:
+        "201":
+          description: Session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionCreateResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /sessions/{session_id}:
+    delete:
+      operationId: endSession
+      summary: Explicitly end a session (Incognito exit)
+      tags: [sessions]
+      security:
+        - sessionToken: []
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Session ended. Credential revoked. Submitted case is not deleted.
+        "401":
+          description: Invalid or expired session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /session-access:
+    post:
+      operationId: accessByReturnSecret
+      summary: Retrieve case access using return secret words
+      tags: [sessions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionAccessRequest"
+      responses:
+        "200":
+          description: Access granted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionAccessResponse"
+        "401":
+          description: Invalid secret or rate limited
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  # Assessments (AI)
+  /assessments:
+    post:
+      operationId: createAssessment
+      summary: Request bounded AI assessment of selected text
+      tags: [assessments]
+      security:
+        - sessionToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssessmentRequest"
+      responses:
+        "200":
+          description: Assessment result (or unavailable)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssessmentResponse"
+
+  # Cases
+  /cases:
+    post:
+      operationId: createCase
+      summary: Submit a support request
+      tags: [cases]
+      security:
+        - sessionToken: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Client-generated UUID. Retry with same key returns original receipt.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CaseCreateRequest"
+      responses:
+        "201":
+          description: Case created and durably received
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CaseCreateResponse"
+        "200":
+          description: Existing case returned (idempotent retry)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CaseCreateResponse"
+        "409":
+          description: Same idempotency key with different payload rejected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /cases/{case_id}/safe-view:
+    get:
+      operationId: getCaseSafeView
+      summary: Child-visible case progress (restricted fields only)
+      tags: [cases]
+      security:
+        - sessionToken: []
+      parameters:
+        - name: case_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Safe case view
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CaseSafeView"
+        "403":
+          description: Not authorized for this case
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /staff/cases:
+    get:
+      operationId: listStaffCases
+      summary: List cases for the authenticated staff member's organization
+      tags: [staff-cases]
+      security:
+        - staffToken: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/CaseStatus"
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: List of cases (org-scoped)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  cases:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/CaseStaffView"
+                  total:
+                    type: integer
+
+  /staff/cases/{case_id}:
+    get:
+      operationId: getStaffCase
+      summary: Get case detail (staff, org-scoped)
+      tags: [staff-cases]
+      security:
+        - staffToken: []
+      parameters:
+        - name: case_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Case detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CaseStaffView"
+        "403":
+          description: Not authorized for this case
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  # Assignments
+  /staff/cases/{case_id}/assignments:
+    post:
+      operationId: createAssignment
+      summary: Assign a case to a responder
+      tags: [assignments]
+      security:
+        - staffToken: []
+      parameters:
+        - name: case_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignmentCreateRequest"
+      responses:
+        "201":
+          description: Assignment created
+        "403":
+          description: Not authorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /staff/assignments/{assignment_id}/accept:
+    post:
+      operationId: acceptAssignment
+      summary: Explicitly accept responsibility for an assigned case
+      tags: [assignments]
+      security:
+        - staffToken: []
+      parameters:
+        - name: assignment_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignmentAcceptRequest"
+      responses:
+        "200":
+          description: Accepted
+        "409":
+          description: Concurrent acceptance conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  # Messages
+  /staff/cases/{case_id}/messages:
+    post:
+      operationId: sendMessage
+      summary: Send a message on a case (staff or authorized session)
+      tags: [messages]
+      security:
+        - staffToken: []
+      parameters:
+        - name: case_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MessageSendRequest"
+      responses:
+        "201":
+          description: Message sent
+
+  # Staff auth (local stub)
+  /staff/auth/login:
+    post:
+      operationId: staffLogin
+      summary: Staff login (local stub for demo)
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, expires_at, staff_id, role]
+                properties:
+                  token:
+                    type: string
+                  expires_at:
+                    type: string
+                    format: date-time
+                  staff_id:
+                    type: string
+                    format: uuid
+                  role:
+                    type: string
+                    enum: [responder, supervisor, alert_preparer, alert_approver]
+                  organization_id:
+                    type: string
+                    format: uuid
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  # Alerts (staff)
+  /staff/alert-drafts:
+    post:
+      operationId: createAlertDraft
+      summary: Create an alert draft (alert_preparer role required)
+      tags: [alerts]
+      security:
+        - staffToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AlertDraftRequest"
+      responses:
+        "201":
+          description: Alert draft created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertRevision"
+
+  /staff/alert-drafts/{revision_id}:
+    get:
+      operationId: getAlertDraft
+      summary: Get alert draft/revision
+      tags: [alerts]
+      security:
+        - staffToken: []
+      parameters:
+        - name: revision_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Alert revision
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertRevision"
+
+  /staff/alert-approvals:
+    post:
+      operationId: submitAlertApproval
+      summary: Approve or reject an alert revision (alert_approver role; cannot self-approve)
+      tags: [alerts]
+      security:
+        - staffToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AlertApprovalRequest"
+      responses:
+        "200":
+          description: Decision recorded
+        "403":
+          description: Self-approval rejected or insufficient role
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "409":
+          description: Revision has changed since last seen
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /staff/alerts/{alert_id}/activate:
+    post:
+      operationId: activateAlert
+      summary: Activate an approved alert revision (creates outbox event)
+      tags: [alerts]
+      security:
+        - staffToken: []
+      parameters:
+        - name: alert_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [approved_revision_id]
+              properties:
+                approved_revision_id:
+                  type: string
+                  format: uuid
+      responses:
+        "200":
+          description: Alert activated, outbox event created
+        "409":
+          description: Revision not approved or already activated with different revision
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /staff/alerts/{alert_id}/withdraw:
+    post:
+      operationId: withdrawAlert
+      summary: Withdraw an active alert
+      tags: [alerts]
+      security:
+        - staffToken: []
+      parameters:
+        - name: alert_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+      responses:
+        "200":
+          description: Alert withdrawn. Unsent jobs cancelled.
+
+  # Public alert (no auth)
+  /public/alerts/{alert_id}:
+    get:
+      operationId: getPublicAlert
+      summary: Public alert view (approved projection only)
+      tags: [public]
+      parameters:
+        - name: alert_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Public alert
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicAlertView"
+        "404":
+          description: Alert not found or not publicly visible
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  # Subscriptions
+  /subscriptions:
+    post:
+      operationId: createSubscription
+      summary: Subscribe to alerts for an area (explicit consent required)
+      tags: [subscriptions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubscriptionRequest"
+      responses:
+        "201":
+          description: Subscription created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [subscription_id]
+                properties:
+                  subscription_id:
+                    type: string
+                    format: uuid
+        "422":
+          description: Allowlist full or consent not confirmed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /subscriptions/{subscription_id}:
+    delete:
+      operationId: deleteSubscription
+      summary: Unsubscribe (revocation effective before next send)
+      tags: [subscriptions]
+      parameters:
+        - name: subscription_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Unsubscribed
+
+  # Tips
+  /tips:
+    post:
+      operationId: createTip
+      summary: Submit a private sighting tip (public — opaque receipt returned)
+      tags: [tips]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TipCreateRequest"
+      responses:
+        "201":
+          description: Tip received (opaque receipt only)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TipCreateResponse"
+
+  /staff/tips:
+    get:
+      operationId: listTips
+      summary: List tips for an active alert (authorized reviewers only)
+      tags: [tips]
+      security:
+        - staffToken: []
+      parameters:
+        - name: alert_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Tips list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tips:
+                    type: array
+                    items:
+                      type: object
+                      required: [tip_id, sighting_description, received_at]
+                      properties:
+                        tip_id:
+                          type: string
+                          format: uuid
+                        sighting_description:
+                          type: string
+                        approximate_location:
+                          type: string
+                          nullable: true
+                        received_at:
+                          type: string
+                          format: date-time
