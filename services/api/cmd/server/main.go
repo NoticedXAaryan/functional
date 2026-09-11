@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -67,6 +68,14 @@ func main() {
 	}
 	defer pool.Close()
 
+	staffAuth := authMW.RequireStaffToken(cfg)
+	if cfg.StaffAuthMode == "oidc" {
+		staffAuth, err = authMW.NewOIDCStaffMiddleware(context.Background(), cfg, pool)
+		if err != nil {
+			log.Fatal().Err(err).Msg("identity-provider configuration failed; refusing staff authentication fallback")
+		}
+	}
+
 	// ── Router ─────────────────────────────────────────────────────────────
 	r := chi.NewRouter()
 
@@ -129,12 +138,23 @@ func main() {
 
 		// Staff — all require staff JWT
 		r.Route("/staff", func(r chi.Router) {
+			r.Get("/auth/config", func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.Header().Set("Cache-Control", "no-store")
+				_ = json.NewEncoder(w).Encode(map[string]string{"mode": cfg.StaffAuthMode, "issuer": cfg.OIDCIssuer, "client_id": cfg.OIDCClientID})
+			})
 			// Login is public within /staff
 			r.Post("/auth/login", authMW.NewStaffAuthHandler(pool, cfg).HandleLogin)
 
 			// Everything else requires staff auth
 			r.Group(func(r chi.Router) {
-				r.Use(authMW.RequireStaffToken(cfg))
+				r.Use(staffAuth)
+				r.Get("/auth/me", func(w http.ResponseWriter, r *http.Request) {
+					claims := authMW.GetStaffClaims(r.Context())
+					w.Header().Set("Content-Type", "application/json")
+					w.Header().Set("Cache-Control", "no-store")
+					_ = json.NewEncoder(w).Encode(map[string]string{"staff_id": claims.StaffID, "organization_id": claims.OrganizationID, "role": claims.Role})
+				})
 				r.Mount("/cases", cases.NewStaffHandler(pool, cfg).Routes())
 				r.Mount("/assignments", assignments.NewHandler(pool, cfg).Routes())
 				r.Mount("/messages", messages.NewHandler(pool, cfg).Routes())

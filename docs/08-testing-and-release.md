@@ -1,5 +1,7 @@
 # Testing and release
 
+Current checkout: a prototype and tests now exist. The specification below remains the target acceptance standard. See [actual verification and gaps](12-implementation-status.md); a skipped database test does not establish release readiness. Use the suite inside `services/api/tests/integration/`.
+
 Status: verification specification, prepared 11 September 2026. No tests, implementation commands, deployments or results are claimed to exist. Gemini should implement the tests alongside the corresponding work packages in [delivery plan](07-delivery-plan.md), then record actual evidence.
 
 Reference inputs: [system blueprint](../product-design/bal-suraksha-system-blueprint.md) and [synthetic fixture catalogue](fixtures/scenarios.json). All sample concerns, organizations, areas and alerts are fictional. Use these inputs to test behavior, not to infer real incidents or risk-model accuracy.

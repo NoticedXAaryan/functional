@@ -50,6 +50,7 @@ func RequireSessionToken(cfg *config.Config, pool ...*db.Pool) func(http.Handler
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Cache-Control", "no-store")
 			tokenStr := extractBearer(r)
 			if tokenStr == "" {
 				writeError(w, http.StatusUnauthorized, "missing_session_token", "Authorization token required")
@@ -62,8 +63,8 @@ func RequireSessionToken(cfg *config.Config, pool ...*db.Pool) func(http.Handler
 					return nil, jwt.ErrSignatureInvalid
 				}
 				return []byte(cfg.SessionSecret), nil
-			})
-			if err != nil || !token.Valid {
+			}, jwt.WithValidMethods([]string{"HS256"}), jwt.WithExpirationRequired())
+			if err != nil || token == nil || !token.Valid || claims.SessionID == "" {
 				writeError(w, http.StatusUnauthorized, "invalid_session_token", "Session token is invalid or expired")
 				return
 			}
@@ -102,6 +103,7 @@ func RequireSessionToken(cfg *config.Config, pool ...*db.Pool) func(http.Handler
 func RequireStaffToken(cfg *config.Config) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Cache-Control", "no-store")
 			tokenStr := extractBearer(r)
 			if tokenStr == "" {
 				writeError(w, http.StatusUnauthorized, "missing_staff_token", "Staff authorization required")
@@ -114,8 +116,10 @@ func RequireStaffToken(cfg *config.Config) func(http.Handler) http.Handler {
 					return nil, jwt.ErrSignatureInvalid
 				}
 				return []byte(cfg.SessionSecret), nil
-			})
-			if err != nil || !token.Valid {
+			}, jwt.WithValidMethods([]string{"HS256"}), jwt.WithExpirationRequired())
+			// Session and staff tokens share the signing key today. A valid signature
+			// alone must never promote a child's session into staff authorization.
+			if err != nil || token == nil || !token.Valid || claims.StaffID == "" || claims.OrganizationID == "" || claims.Role == "" {
 				writeError(w, http.StatusUnauthorized, "invalid_staff_token", "Staff token is invalid or expired")
 				return
 			}
@@ -152,6 +156,11 @@ func NewStaffAuthHandler(pool *db.Pool, cfg *config.Config) *StaffAuthHandler {
 // HandleLogin authenticates staff with username/password and returns a JWT.
 // This is the local stub for demo mode. In production, replace with OIDC.
 func (h *StaffAuthHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	if h.cfg.AppMode != config.AppModeDemo || h.cfg.StaffAuthMode == "oidc" {
+		writeError(w, http.StatusForbidden, "use_organization_sign_in", "Sign in through your organization's identity provider")
+		return
+	}
 	var req struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
@@ -236,6 +245,7 @@ func writeError(w http.ResponseWriter, status int, code, msg string) {
 }
 
 func writeJSON(w http.ResponseWriter, status int, v interface{}) {
+	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
