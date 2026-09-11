@@ -131,8 +131,54 @@ func NewApprovalHandler(pool *db.Pool, cfg *config.Config) *ApprovalHandler {
 }
 func (h *ApprovalHandler) Routes() http.Handler {
 	r := chi.NewRouter()
+	r.Get("/", h.HandleListDrafts)
 	r.Post("/", h.HandleDecision)
 	return r
+}
+
+func (h *ApprovalHandler) HandleListDrafts(w http.ResponseWriter, r *http.Request) {
+	claims := authMW.GetStaffClaims(r.Context())
+	if claims == nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
+		return
+	}
+
+	rows, err := h.pool.Query(r.Context(), `
+		SELECT ar.id, ar.alert_id, ar.status, ar.description_text, ar.issuer_name, ar.expiry_at, ar.prepared_by
+		FROM alert_revisions ar
+		JOIN alerts a ON a.id = ar.alert_id
+		WHERE a.organization_id = $1 AND ar.status = 'DRAFT'
+		ORDER BY ar.created_at DESC LIMIT 50
+	`, claims.OrganizationID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "db_error", "Database error")
+		return
+	}
+	defer rows.Close()
+
+	type draftRow struct {
+		ID              string    `json:"id"`
+		AlertID         string    `json:"alert_id"`
+		Status          string    `json:"status"`
+		DescriptionText string    `json:"description_text"`
+		IssuerName      string    `json:"issuer_name"`
+		ExpiryAt        time.Time `json:"expiry_at"`
+		PreparedBy      string    `json:"prepared_by"`
+	}
+
+	var drafts []draftRow
+	for rows.Next() {
+		var d draftRow
+		if err := rows.Scan(&d.ID, &d.AlertID, &d.Status, &d.DescriptionText, &d.IssuerName, &d.ExpiryAt, &d.PreparedBy); err != nil {
+			continue
+		}
+		drafts = append(drafts, d)
+	}
+	if drafts == nil {
+		drafts = []draftRow{}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{"drafts": drafts})
 }
 
 func (h *ApprovalHandler) HandleDecision(w http.ResponseWriter, r *http.Request) {

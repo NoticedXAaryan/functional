@@ -11,13 +11,16 @@ interface StaffClaims {
 }
 
 interface CaseRow {
-  id: string;
+  case_id?: string;
+  id?: string;
   status: string;
   route_type: string;
   conflict_flag: string | null;
   created_at: string;
-  organization_id: string;
+  organization_id?: string;
 }
+
+const getCaseId = (c: CaseRow | null | undefined): string => c?.case_id || c?.id || '';
 
 interface Assignment {
   id: string;
@@ -144,13 +147,14 @@ function App() {
 
   // ── Open case detail ────────────────────────────────────────────────────
   const openCase = async (caseRow: CaseRow) => {
+    const cid = getCaseId(caseRow);
     setSelectedCase(caseRow);
     setErrorMsg(null);
     setLoading(true);
     try {
       const [aRes, mRes] = await Promise.all([
-        fetch(`${API_BASE}/staff/assignments?case_id=${caseRow.id}`, { headers: authHeaders() }),
-        fetch(`${API_BASE}/staff/messages?case_id=${caseRow.id}`, { headers: authHeaders() }),
+        fetch(`${API_BASE}/staff/assignments?case_id=${cid}`, { headers: authHeaders() }),
+        fetch(`${API_BASE}/staff/messages?case_id=${cid}`, { headers: authHeaders() }),
       ]);
       const aData = await aRes.json();
       const mData = await mRes.json();
@@ -178,7 +182,8 @@ function App() {
       if (!res.ok) throw new Error(data.error || 'Failed to accept assignment');
       // Refresh assignments
       if (selectedCase) {
-        const aRes = await fetch(`${API_BASE}/staff/assignments?case_id=${selectedCase.id}`, {
+        const cid = getCaseId(selectedCase);
+        const aRes = await fetch(`${API_BASE}/staff/assignments?case_id=${cid}`, {
           headers: authHeaders(),
         });
         const aData = await aRes.json();
@@ -193,7 +198,8 @@ function App() {
 
   // ── Send message ────────────────────────────────────────────────────────
   const handleSendMessage = async () => {
-    if (!selectedCase || !newMessage.trim()) return;
+    const cid = getCaseId(selectedCase);
+    if (!selectedCase || !cid || !newMessage.trim()) return;
     setLoading(true);
     setErrorMsg(null);
     try {
@@ -201,7 +207,7 @@ function App() {
         method: 'POST',
         headers: authHeaders(),
         body: JSON.stringify({
-          case_id: selectedCase.id,
+          case_id: cid,
           body: newMessage.trim(),
           is_staff_note: isStaffNote,
         }),
@@ -210,7 +216,7 @@ function App() {
       if (!res.ok) throw new Error(data.error || 'Failed to send message');
       setNewMessage('');
       // Refresh messages
-      const mRes = await fetch(`${API_BASE}/staff/messages?case_id=${selectedCase.id}`, {
+      const mRes = await fetch(`${API_BASE}/staff/messages?case_id=${cid}`, {
         headers: authHeaders(),
       });
       const mData = await mRes.json();
@@ -229,8 +235,13 @@ function App() {
     try {
       // Approver role: list drafts in review
       const res = await fetch(`${API_BASE}/staff/alert-approvals`, { headers: authHeaders() });
+      if (!res.ok) {
+        const text = await res.text();
+        let msg = 'Failed to load alerts';
+        try { msg = JSON.parse(text).error || msg; } catch {}
+        throw new Error(msg);
+      }
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to load alerts');
       setAlertDrafts(data.drafts || []);
     } catch (err: any) {
       setErrorMsg(err.message);
@@ -338,19 +349,22 @@ function App() {
               <div className="ops-empty">No cases in queue for your organization.</div>
             )}
             <div className="ops-case-list">
-              {cases.map(c => (
-                <div key={c.id} className="ops-case-row" onClick={() => openCase(c)} id={`case-${c.id}`}>
-                  <div className="ops-case-meta">
-                    <span className="ops-case-id">{c.id.slice(0, 8)}…</span>
-                    <span className="ops-badge" style={{ background: statusColor(c.status) }}>{c.status}</span>
-                    {c.conflict_flag && <span className="ops-badge ops-badge-warn">⚠️ {c.conflict_flag}</span>}
+              {cases.map(c => {
+                const cid = getCaseId(c);
+                return (
+                  <div key={cid || Math.random().toString()} className="ops-case-row" onClick={() => openCase(c)} id={`case-${cid}`}>
+                    <div className="ops-case-meta">
+                      <span className="ops-case-id">{cid ? cid.slice(0, 8) : 'case'}…</span>
+                      <span className="ops-badge" style={{ background: statusColor(c.status) }}>{c.status}</span>
+                      {c.conflict_flag && <span className="ops-badge ops-badge-warn">⚠️ {c.conflict_flag}</span>}
+                    </div>
+                    <div className="ops-case-sub">
+                      <span>{c.route_type}</span>
+                      <span className="ops-muted">{c.created_at ? new Date(c.created_at).toLocaleString() : ''}</span>
+                    </div>
                   </div>
-                  <div className="ops-case-sub">
-                    <span>{c.route_type}</span>
-                    <span className="ops-muted">{new Date(c.created_at).toLocaleString()}</span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
@@ -364,7 +378,7 @@ function App() {
             <div className="ops-card">
               <div className="ops-detail-header">
                 <div>
-                  <h2 className="ops-title">Case {selectedCase.id.slice(0, 8)}…</h2>
+                  <h2 className="ops-title">Case {getCaseId(selectedCase).slice(0, 8)}…</h2>
                   <p className="ops-subtitle">{selectedCase.route_type}</p>
                 </div>
                 <span className="ops-badge" style={{ background: statusColor(selectedCase.status) }}>
