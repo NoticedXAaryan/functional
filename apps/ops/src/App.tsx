@@ -1,14 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import './App.css';
-
-const API_BASE = 'http://localhost:8080/api/v1';
-
-interface StaffClaims {
-  token: string;
-  staffId: string;
-  orgId: string;
-  role: string;
-}
+import { API_BASE, initializeStaffAuth, signInWithOrganization, signOutOfOrganization, staffFetch as fetch } from './auth';
+import type { StaffClaims } from './auth';
 
 interface CaseRow {
   id: string;
@@ -49,18 +42,26 @@ interface AlertDraft {
 type Screen = 'login' | 'cases' | 'case_detail' | 'alerts';
 
 function App() {
-  const [staff, setStaff] = useState<StaffClaims | null>(() => {
-    // Staff token in sessionStorage only (not localStorage) — cleared on tab close
-    try {
-      const t = sessionStorage.getItem('staff_token');
-      if (t) return JSON.parse(t) as StaffClaims;
-    } catch { /* ignore */ }
-    return null;
-  });
+  const [staff, setStaff] = useState<StaffClaims | null>(null);
+  const [authMode, setAuthMode] = useState<'demo' | 'oidc' | null>(null);
 
   const [screen, setScreen] = useState<Screen>(staff ? 'cases' : 'login');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    initializeStaffAuth().then(auth => {
+      if (!active) return;
+      setAuthMode(auth.mode);
+      setStaff(auth.staff);
+      setScreen(auth.staff ? 'cases' : 'login');
+      if (auth.client?.authenticated && !auth.staff) {
+        setErrorMsg('Your organization account has no active staff access. Ask your administrator to assign it.');
+      }
+    }).catch(error => { if (active) setErrorMsg(error instanceof Error ? error.message : 'Sign-in is unavailable.'); });
+    return () => { active = false; };
+  }, []);
 
   // Login form
   const [username, setUsername] = useState('');
@@ -79,7 +80,6 @@ function App() {
 
   const authHeaders = useCallback(() => ({
     'Content-Type': 'application/json',
-    'Cache-Control': 'no-store',
     ...(staff ? { 'Authorization': `Bearer ${staff.token}` } : {}),
   }), [staff]);
 
@@ -102,7 +102,7 @@ function App() {
         orgId: data.organization_id,
         role: data.role,
       };
-      sessionStorage.setItem('staff_token', JSON.stringify(claims));
+      setPassword('');
       setStaff(claims);
       setScreen('cases');
     } catch (err: any) {
@@ -120,6 +120,9 @@ function App() {
     setMessages([]);
     setAlertDrafts([]);
     setScreen('login');
+    if (authMode === 'oidc') {
+      void signOutOfOrganization().catch(() => setErrorMsg('Signed out of this screen. Organization logout failed; close this tab and end your organization session.'));
+    }
   };
 
   // ── Fetch case queue ────────────────────────────────────────────────────
@@ -311,17 +314,24 @@ function App() {
           <div className="ops-card ops-login-card">
             <h1 className="ops-title">Staff Sign In</h1>
             <p className="ops-subtitle">Authorized responders and supervisors only.</p>
-            <form onSubmit={handleLogin} className="ops-form">
-              <label className="ops-label">Username</label>
+            {authMode === null && !errorMsg && <p role="status">Loading sign-in…</p>}
+            {authMode === 'oidc' && (
+              <button type="button" className="ops-btn-primary" onClick={() => {
+                void signInWithOrganization().catch(() => setErrorMsg('Organization sign-in is unavailable. Please try again.'));
+              }}>Sign in with organization</button>
+            )}
+            {authMode === 'demo' && <p className="ops-subtitle">Demo accounts · fictional cases only</p>}
+            {authMode === 'demo' && <form onSubmit={handleLogin} className="ops-form">
+              <label htmlFor="username" className="ops-label">Username</label>
               <input id="username" type="text" className="ops-input" value={username}
                 onChange={e => setUsername(e.target.value)} autoComplete="username" required />
-              <label className="ops-label">Password</label>
+              <label htmlFor="password" className="ops-label">Password</label>
               <input id="password" type="password" className="ops-input" value={password}
                 onChange={e => setPassword(e.target.value)} autoComplete="current-password" required />
               <button id="login-submit" type="submit" className="ops-btn-primary" disabled={loading}>
                 {loading ? 'Signing in…' : 'Sign In →'}
               </button>
-            </form>
+            </form>}
           </div>
         )}
 

@@ -1,5 +1,7 @@
 # Bal Suraksha — Execution Plan & Task Tracker
 
+> Historical implementation checklist. Checked boxes below indicate code was added, not that release gates passed. Current verification, authentication changes and remaining blockers are maintained in [docs/12-implementation-status.md](docs/12-implementation-status.md). P0–P3 are not yet verified complete. Live Gemini assessment is disabled.
+
 ## Phase 0 — Setup & Contracts ✅
 - [x] Schema & DB Migrations 001–009
 - [x] Configuration Mode Guards (`config.go`)

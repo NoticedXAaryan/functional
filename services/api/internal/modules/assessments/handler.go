@@ -3,13 +3,15 @@
 //   - AI is always optional. If unavailable, the human help path continues unimpaired.
 //   - Input is treated as untrusted data — it cannot control the application or Gemini tools.
 //   - Output is validated against a strict schema before serving.
-//   - The stub adapter is used when AI_ENABLED=false or GEMINI_API_KEY is missing.
+//   - Demo mode uses a labeled stub; other modes expose an honest unavailable result.
+//   - A Gemini key never enables child-facing inference.
 //   - No guilt verdict, no numeric certainty score, no automatic actions.
 package assessments
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
@@ -45,15 +47,19 @@ type Adapter interface {
 	Assess(ctx context.Context, selectedText, language string) (*AssessmentResult, error)
 }
 
-// NewHandler creates an assessment Handler, choosing the adapter based on config.
+// NewHandler cannot select an external provider until child-use eligibility is established.
 func NewHandler(pool *db.Pool, cfg *config.Config) *Handler {
-	var adapter Adapter
-	if cfg.AIEnabled && cfg.GeminiAPIKey != "" {
-		adapter = NewGeminiAdapter(cfg)
-	} else {
+	var adapter Adapter = unavailableAdapter{}
+	if cfg.AppMode == config.AppModeDemo {
 		adapter = &StubAdapter{}
 	}
 	return &Handler{pool: pool, cfg: cfg, adapter: adapter}
+}
+
+type unavailableAdapter struct{}
+
+func (unavailableAdapter) Assess(context.Context, string, string) (*AssessmentResult, error) {
+	return nil, errors.New("no approved assessment provider")
 }
 
 // Routes registers assessment routes.
@@ -66,6 +72,8 @@ func (h *Handler) Routes() http.Handler {
 // HandleCreate processes an assessment request.
 // Input text is sanitized and passed to the adapter as data — never as instructions.
 func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	r.Body = http.MaxBytesReader(w, r.Body, 32*1024)
 	var req struct {
 		SelectedText string `json:"selected_text"`
 		Language     string `json:"language"`
@@ -96,7 +104,8 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.adapter.Assess(ctx, req.SelectedText, req.Language)
 	if err != nil {
-		log.Warn().Err(err).Msg("assessment failed — returning unavailable, human path continues")
+		// Provider errors can contain submitted text. Keep them out of ordinary logs.
+		log.Warn().Msg("assessment unavailable; human-help route remains available")
 		writeJSON(w, http.StatusOK, &AssessmentResult{
 			Status:             "unavailable",
 			HumanHelpAvailable: true,

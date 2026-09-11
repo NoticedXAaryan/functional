@@ -21,6 +21,7 @@ services:
 
   # ── Redis (optional — rate limiting / temp state) ──────────────────────
   redis:
+    profiles: ["optional"]
     image: redis:7-alpine
     container_name: balsuraksha-redis
     restart: unless-stopped
@@ -35,24 +36,24 @@ services:
   # ── Go API server ─────────────────────────────────────────────────────
   api:
     build:
-      context: ./services/api
-      dockerfile: ../../infra/docker/api.Dockerfile
+      context: .
+      dockerfile: infra/docker/api.Dockerfile
     container_name: balsuraksha-api
     restart: unless-stopped
     env_file:
-      - .env
+      - path: .env
+        required: false
+    environment:
+      APP_MODE: ${APP_MODE:-demo}
+      NOTIFICATION_MODE: ${NOTIFICATION_MODE:-DISABLED}
+      SESSION_SECRET: ${SESSION_SECRET:-demo-only-signing-secret-change-before-real-use}
+      DATABASE_URL: postgres://balsuraksha:balsuraksha@postgres:5432/balsuraksha?sslmode=disable
+      MIGRATION_PATH: /app/db/migrations
     ports:
       - "8080:8080"
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_healthy
-    volumes:
-      # Mount source for hot-reload via air (dev only)
-      - ./services/api:/app
-      - go_cache:/root/.cache/go-build
-      - go_mod_cache:/go/pkg/mod
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz || exit 1"]
       interval: 10s
@@ -63,23 +64,22 @@ services:
   # ── Go background worker ───────────────────────────────────────────────
   worker:
     build:
-      context: ./services/worker
-      dockerfile: ../../infra/docker/worker.Dockerfile
+      context: .
+      dockerfile: infra/docker/worker.Dockerfile
     container_name: balsuraksha-worker
     restart: unless-stopped
     env_file:
-      - .env
+      - path: .env
+        required: false
+    environment:
+      APP_MODE: ${APP_MODE:-demo}
+      NOTIFICATION_MODE: ${NOTIFICATION_MODE:-DISABLED}
+      DATABASE_URL: postgres://balsuraksha:balsuraksha@postgres:5432/balsuraksha?sslmode=disable
     depends_on:
       postgres:
         condition: service_healthy
       api:
         condition: service_healthy
-    volumes:
-      - ./services/worker:/app
-      - go_cache:/root/.cache/go-build
-      - go_mod_cache:/go/pkg/mod
 
 volumes:
   postgres_data:
-  go_cache:
-  go_mod_cache:

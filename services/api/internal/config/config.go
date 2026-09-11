@@ -24,9 +24,9 @@ const (
 type NotificationMode string
 
 const (
-	NotificationDisabled     NotificationMode = "DISABLED"
+	NotificationDisabled      NotificationMode = "DISABLED"
 	NotificationTestAllowlist NotificationMode = "TEST_ALLOWLIST"
-	NotificationLive         NotificationMode = "LIVE"
+	NotificationLive          NotificationMode = "LIVE"
 )
 
 // Config is the single authoritative configuration object for the API server.
@@ -46,8 +46,12 @@ type Config struct {
 	APIHost string
 
 	// JWT
-	SessionSecret      string
+	SessionSecret       string
 	StaffJWTExpiryHours int
+	StaffAuthMode       string
+	OIDCIssuer          string
+	OIDCAudience        string
+	OIDCClientID        string
 
 	// AI
 	GeminiAPIKey     string
@@ -60,9 +64,9 @@ type Config struct {
 	FCMProjectID          string
 
 	// TEST controls
-	TestAllowlistMax            int
-	TestCampaignRevisionCap     int
-	TestCumulativeRecipientCap  int
+	TestAllowlistMax           int
+	TestCampaignRevisionCap    int
+	TestCumulativeRecipientCap int
 
 	// Return secret
 	ReturnSecretWordCount int
@@ -124,9 +128,39 @@ func Load() (*Config, error) {
 	c.GoogleCredentialsPath = os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
 	c.FCMProjectID = os.Getenv("FCM_PROJECT_ID")
 
-	// AI only enabled if explicitly set AND key is present
-	aiEnabled, _ := strconv.ParseBool(os.Getenv("AI_ENABLED"))
-	c.AIEnabled = aiEnabled && c.GeminiAPIKey != ""
+	// No approved child-facing inference provider is configured in this prototype.
+	// In particular, possession of a Gemini key does not establish eligibility.
+	if raw := strings.TrimSpace(os.Getenv("AI_ENABLED")); raw != "" {
+		aiEnabled, err := strconv.ParseBool(raw)
+		if err != nil {
+			return nil, errors.New("AI_ENABLED must be true or false")
+		}
+		if aiEnabled {
+			return nil, errors.New("live assessments are disabled until a child-facing provider is approved; set AI_ENABLED=false for the labeled demo or human-help fallback")
+		}
+	}
+	c.AIEnabled = false
+
+	c.StaffAuthMode = strings.ToLower(strings.TrimSpace(envOr("STAFF_AUTH_MODE", "demo")))
+	if c.StaffAuthMode != "demo" && c.StaffAuthMode != "oidc" {
+		return nil, errors.New("STAFF_AUTH_MODE must be demo or oidc")
+	}
+	if c.AppMode != AppModeDemo && c.StaffAuthMode != "oidc" {
+		return nil, errors.New("beta and production require STAFF_AUTH_MODE=oidc; local password login is demo-only")
+	}
+	if c.StaffAuthMode == "oidc" {
+		c.OIDCIssuer = strings.TrimRight(requireEnv("OIDC_ISSUER"), "/")
+		c.OIDCAudience = requireEnv("OIDC_AUDIENCE")
+		c.OIDCClientID = requireEnv("OIDC_CLIENT_ID")
+		if c.OIDCIssuer != "" && !strings.HasPrefix(c.OIDCIssuer, "https://") {
+			if c.AppMode != AppModeDemo || (!strings.HasPrefix(c.OIDCIssuer, "http://localhost:") && !strings.HasPrefix(c.OIDCIssuer, "http://127.0.0.1:")) {
+				return nil, errors.New("OIDC_ISSUER must use HTTPS; HTTP loopback is allowed only in demo mode")
+			}
+		}
+	}
+	if c.AppMode != AppModeDemo && (len(c.SessionSecret) < 32 || strings.HasPrefix(c.SessionSecret, "demo-") || strings.HasPrefix(c.SessionSecret, "CHANGE_THIS")) {
+		return nil, errors.New("real-use modes require a generated SESSION_SECRET of at least 32 bytes")
+	}
 
 	c.GeminiTimeoutSec = envIntOr("GEMINI_TIMEOUT_SECONDS", 10)
 	c.StaffJWTExpiryHours = envIntOr("STAFF_JWT_EXPIRY_HOURS", 8)

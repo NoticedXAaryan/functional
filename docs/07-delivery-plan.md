@@ -1,6 +1,6 @@
 # Delivery plan
 
-Status: proposed implementation plan, prepared 11 September 2026. The repository has no product implementation yet. Paths, work packages, tests and evidence below are instructions for future implementation, not claims that code or commands already exist.
+Status: phased target plan, updated 11 September 2026. A prototype now exists. Start with the audit and repair priorities in [implementation status](12-implementation-status.md); reuse the existing applications and established authentication components. Work packages below define required outcomes, not evidence that the existing implementation has passed them.
 
 Source of product intent: [system blueprint](../product-design/bal-suraksha-system-blueprint.md). Release verification is defined in [testing and release](08-testing-and-release.md); safe sample inputs are in [synthetic scenarios](fixtures/scenarios.json). Requirement identifiers may be added to the traceability table without changing the work-package or test identifiers below.
 
@@ -57,7 +57,7 @@ Additional controls:
 
 ## 4. Suggested implementation ownership and paths
 
-These are proposed paths, not discovered files. Choose them once in P0 and update all documents if the actual scaffold differs.
+The principal application and service paths below now exist. `packages/api-client/` remains proposed; executable API integration tests are under `services/api/tests/integration/`. Resolve any other path against the checkout before running a command.
 
 | Owner | Primary responsibility | Proposed paths |
 | --- | --- | --- |
