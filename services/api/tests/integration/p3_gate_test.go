@@ -100,22 +100,21 @@ func TestT027_SingleTransactionActivation(t *testing.T) {
 	alertID, revisionID := seedAlertRevision(t, env, org, preparerID)
 
 	// Approve with approver
-	approverToken := makeStaffToken(t, env.cfg, approverID, org, "approver")
+	approverToken := makeStaffToken(t, env.cfg, approverID, org, "alert_approver")
 	ar := postJSON(t, urlf(env.server.URL, "/api/v1/staff/alert-approvals"),
 		map[string]interface{}{"revision_id": revisionID, "decision": "approve"},
 		map[string]string{"Authorization": "Bearer " + approverToken})
 	if ar.StatusCode != http.StatusOK && ar.StatusCode != http.StatusCreated {
-		t.Skipf("T-027: approval failed (%d) — can't test activation", ar.StatusCode)
+		t.Fatalf("T-027: approval failed (%d) — %v", ar.StatusCode, parseBody(t, ar))
 	}
 
-	// Activate with an approver-or-supervisor token
-	superToken := makeStaffToken(t, env.cfg, approverID, org, "supervisor")
+	// Activate with token
+	activatorToken := makeStaffToken(t, env.cfg, approverID, org, "responder")
 	activateResp := postJSON(t, urlf(env.server.URL, "/api/v1/staff/alerts/%s/activate", alertID),
-		map[string]interface{}{"revision_id": revisionID},
-		map[string]string{"Authorization": "Bearer " + superToken})
+		map[string]interface{}{"approved_revision_id": revisionID},
+		map[string]string{"Authorization": "Bearer " + activatorToken})
 	if activateResp.StatusCode != http.StatusOK && activateResp.StatusCode != http.StatusCreated {
-		body := parseBody(t, activateResp)
-		t.Skipf("T-027: activation returned %d — %v (may need specific role)", activateResp.StatusCode, body)
+		t.Fatalf("T-027: activation returned %d — %v", activateResp.StatusCode, parseBody(t, activateResp))
 	}
 
 	// After activation, BOTH must exist in a single snapshot
