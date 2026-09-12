@@ -1,9 +1,12 @@
-# Bal Suraksha documentation
+# Bal Setu documentation
 
-Start with the [application user guide](../README.md) to run the app and understand its screens. Read the [current audit](13-system-audit-and-completion-plan.md) for what works and what must be completed. The product remains a synthetic demonstration.
+Start with the [child-centred UI specification](ui/README.md) for the current design and AI implementation handoff. It covers the Bal Setu identity, proposed Nithari Alert naming, every public/staff flow, voice, memorable return access and geographic notifications. The user reports the application is deployed; the referenced live deployment strategy and URLs still need reconciliation with local configuration. This specification does not claim the proposed features are implemented.
+
+Use the [application user guide](../README.md) for existing local instructions. The [earlier audit](13-system-audit-and-completion-plan.md) and [beta handoff](14-beta-handoff.md) are dated engineering snapshots, not current deployment evidence.
 
 | Document | Purpose |
 | --- | --- |
+| [UI design and implementation pack](ui/README.md) | Latest child-centred requirements, eight organized documents, contracts and phased acceptance criteria |
 | [14 Current beta handoff](14-beta-handoff.md) | Latest engineering changes, real deployment setup and remaining operating requirements |
 | [01 Product requirements](01-product-requirements.md) | Intended behavior and acceptance requirements |
 | [02 Experience and content](02-experience-and-content.md) | Navigation, copy, states and accessibility |
@@ -22,6 +25,6 @@ Start with the [application user guide](../README.md) to run the app and underst
 | [OpenAPI](../api/openapi.yaml) | API contract; historical portions still need reconciliation |
 | [Fictional scenarios](fixtures/scenarios.json) | Synthetic demo/evaluation inputs |
 
-Default to APP_MODE=demo, NOTIFICATION_MODE=DISABLED and AI_ENABLED=false. Test push requires explicitly invited consenting testers. Planned phases and checked task boxes are not production-readiness evidence. Current audit findings override historical claims that a capability is complete.
+Keep local/synthetic work isolated from the real deployment. A real beta must use actual operator records, non-demo credentials and truthful capability flags; do not merely remove demo labels. Test push requires explicitly invited consenting testers. Planned phases and checked task boxes are not production-readiness evidence.
 
 The [original blueprint](../product-design/bal-suraksha-system-blueprint.md) is historical context. Gemini may be used by an adult developer as a coding assistant; this does not establish eligibility for a child-facing runtime service.

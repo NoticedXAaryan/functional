@@ -1,5 +1,7 @@
 # Bal Suraksha / Savera Alert
 
+**Latest design specification — Bal Setu:** [Read the complete child-centred UI and AI implementation pack](docs/ui/README.md). It specifies the new identity, proposed Nithari Alert name, simplified journeys, optional voice, secure three-word return experience and nearby notifications. These are planned changes, not yet a description of the deployed UI. The user reports a live deployment; the earlier status and local instructions below are historical until reconciled with the live deployment strategy.
+
 A child-safety prototype with three connected spaces: **private help**, **a staff workspace**, and **local community alerts**.
 
 The interface uses a light colour palette, four clear home choices, and layouts that adapt to phone screens. Each workspace links to the others. Notification setup stays hidden when the service is switched off. For hosted deployments, set `VITE_OPS_URL` in the public app and `VITE_PUBLIC_URL` in the staff app to the corresponding frontend addresses; local defaults are ports 5174 and 5173.
