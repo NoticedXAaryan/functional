@@ -1,0 +1,1248 @@
+{
+  "version": 1,
+  "common": {
+    "sourceStatus": "Design specification only; no real reports or success states are seeded.",
+    "layout": {
+      "phoneWidth": 390,
+      "minWidth": 320,
+      "contentMaxWidth": 640,
+      "gutterPhone": 16,
+      "gutterDesktop": 24,
+      "primaryMinHeight": 56,
+      "choiceMinHeight": 80,
+      "gap": 16,
+      "bodyFontPx": 18
+    },
+    "header": [
+      "Bal Setu",
+      "Language",
+      "Leave this page"
+    ],
+    "loading": "Connecting to the support service…",
+    "offline": "This has not been sent. Try again when you have internet.",
+    "unknownCommit": "We could not confirm it yet. Try again to check.",
+    "retry": "Try again",
+    "emptyFeed": "No alerts are published for this area right now.",
+    "emptyMessages": "No messages yet. You can leave a message here."
+  },
+  "screens": [
+    {
+      "id": "C01",
+      "route": "/",
+      "title": "You can ask for help here.",
+      "helper": "You can type, use your voice, or choose a button.",
+      "content": [
+        "Ask for help",
+        "My messages",
+        "Someone is missing",
+        "Nearby alerts"
+      ],
+      "primary": {
+        "label": "Ask for help",
+        "action": "navigate:C02",
+        "alreadyInContent": true
+      },
+      "secondary": "My messages → C08",
+      "dependency": "public_config",
+      "specificRules": "Render exactly four navigation actions. Ask for help is the first purple action, not a second button below the four choices. No Back control on the home route. Hide redundant My messages secondary action because it already appears in the four choices.",
+      "layout": "child_single_column",
+      "states": [
+        "loading",
+        "ready",
+        "empty_if_applicable",
+        "permission_denied",
+        "offline",
+        "submission_pending",
+        "submission_unconfirmed",
+        "server_rejected",
+        "expired_access"
+      ],
+      "successRule": "Never infer success from time elapsed, a click, or a local state toggle. Use the actual committed API outcome."
+    },
+    {
+      "id": "C02",
+      "route": "/help/start",
+      "title": "What would you like help with?",
+      "helper": "You do not need to know what to call it.",
+      "content": [
+        "Something happened to me",
+        "Something online worries me",
+        "I am worried about someone",
+        "I am not sure"
+      ],
+      "primary": {
+        "label": "Next",
+        "action": "create_private_session_then:C03",
+        "alreadyInContent": false
+      },
+      "secondary": "Ask for a different team → C10",
+      "dependency": "intake_open_and_real_routing",
+      "specificRules": "Use the domain-specific validation and permission requirements in the parent UI specification.",
+      "layout": "child_single_column",
+      "states": [
+        "loading",
+        "ready",
+        "empty_if_applicable",
+        "permission_denied",
+        "offline",
+        "submission_pending",
+        "submission_unconfirmed",
+        "server_rejected",
+        "expired_access"
+      ],
+      "successRule": "Never infer success from time elapsed, a click, or a local state toggle. Use the actual committed API outcome."
+    },
+    {
+      "id": "C03",
+      "route": "/help/message",
+      "title": "What would you like us to know?",
+      "helper": "Share as much or as little as you want.",
+      "content": [
+        "Type a message",
+        "Record my voice",
+        "Just ask for help"
+      ],
+      "primary": {
+        "label": "Next",
+        "action": "save_memory_draft_then:C04",
+        "alreadyInContent": false
+      },
+      "secondary": "Back → C02",
+      "dependency": "intent_only_case_api;voice_optional",
+      "specificRules": "Use the domain-specific validation and permission requirements in the parent UI specification.",
+      "layout": "child_single_column",
+      "states": [
+        "loading",
+        "ready",
+        "empty_if_applicable",
+        "permission_denied",
+        "offline",
+        "submission_pending",
+        "submission_unconfirmed",
+        "server_rejected",
+        "expired_access"
+      ],
+      "successRule": "Never infer success from time elapsed, a click, or a local state toggle. Use the actual committed API outcome."
+    },
+    {
+      "id": "C04",
+      "route": "/help/replies",
+      "title": "Would you like messages here?",
+      "helper": "We will not send notifications about this conversation.",
+      "content": [
+        "Yes, when I come back",
+        "Send this without replies"
+      ],
+      "primary": {
+        "label": "Next",
+        "action": "save_explicit_reply_choice_then:C05",
+        "alreadyInContent": false
+      },
+      "secondary": "Back → C03",
+      "dependency": "reply_preference_v2",
+      "specificRules": "Initial flow: require an explicit choice, then Next to review. Opened from an existing conversation: show current preference, primary becomes Save reply choice; PATCH the preference with expected version and return to C09. Never create a new case from settings.",
+      "layout": "child_single_column",
+      "states": [
+        "loading",
+        "ready",
+        "empty_if_applicable",
+        "permission_denied",
+        "offline",
+        "submission_pending",
+        "submission_unconfirmed",
+        "server_rejected",
+        "expired_access"
+      ],
+      "successRule": "Never infer success from time elapsed, a click, or a local state toggle. Use the actual committed API outcome."
+    },
+    {
+      "id": "C05",
+      "route": "/help/review",
+      "title": "Check what you are sending",
+      "helper": "This goes to {operatorName}.",
+      "content": [
+        "Your choices — Change",
+        "Your message — Change",
+        "Your reply choice — Change"
+      ],
+      "primary": {
+        "label": "Send to the support team",
+        "action": "commit_case_idempotently_then:C06",
+        "alreadyInContent": false
+      },
+      "secondary": "Back → C04",
+      "dependency": "private_case_commit",
+      "specificRules": "The Change controls navigate to the corresponding step and preserve all other fields. Escape report text as plain text. If operatorName is unavailable, do not show the template or allow Send. No receipt until commit.",
+      "layout": "child_single_column",
+      "states": [
+        "loading",
+        "ready",
+        "empty_if_applicable",
+        "permission_denied",
+        "offline",
+        "submission_pending",
+        "submission_unconfirmed",
+        "server_rejected",
+        "expired_access"
+      ],
+      "successRule": "Never infer success from time elapsed, a click, or a local state toggle. Use the actual committed API outcome."
+    },
+    {
+      "id": "C06",
+      "route": "/help/received",
+      "title": "Your message was received.",
+      "helper": "It was saved for the team. They may not have read it yet.",
+      "content": [
+        "You choose how to come back",
+        "You can also leave now"
+      ],
+      "primary": {
+        "label": "Choose how to come back",
+        "action": "navigate:C07",
+        "alreadyInContent": false
+      },
+      "secondary": "Leave this page → quick_exit",
+      "dependency": "durable_receipt",
+      "specificRules": "Do not show Back if it could submit the report again. This screen requires a real receipt. Reload without an active session goes to return access, not a fabricated receipt.",
+      "layout": "child_single_column",
+      "states": [
+        "loading",
+        "ready",
+        "empty_if_applicable",
+        "permission_denied",
+        "offline",
+        "submission_pending",
+        "submission_unconfirmed",
+        "server_rejected",
+        "expired_access"
+      ],
+      "successRule": "Never infer success from time elapsed, a click, or a local state toggle. Use the actual committed API outcome."
+    },
+    {
+      "id": "C07",
+      "route": "/help/return-setup",
+      "title": "Choose how to come back",
+      "helper": "Only save access on a device that is safe for you.",
+      "content": [
+        "Use this device again",
+        "Use a return card",
+        "Continue without saving access"
+      ],
+      "primary": {
+        "label": "Continue",
+        "action": "branch_to_device_words_or_card_then:C09",
+        "alreadyInContent": false
+      },
+      "secondary": "Not now → C09",
+      "dependency": "secure_return_device_and_card",
+      "specificRules": "Branch into device or card setup exactly as DECISIONS.md describes. Choose each of the three word slots and confirm them. Not now bypasses persistence. No static example word is a credential. Do not enable this flow until secure backend and reviewed vocabulary exist.",
+      "layout": "child_single_column",
+      "states": [
+        "loading",
+        "ready",
+        "empty_if_applicable",
+        "permission_denied",
+        "offline",
+        "submission_pending",
+        "submission_unconfirmed",
+        "server_rejected",
+        "expired_access"
+      ],
+      "successRule": "Never infer success from time elapsed, a click, or a local state toggle. Use the actual committed API outcome."
+    },
+    {
+      "id": "C08",
+      "route": "/my-messages",
+      "title": "Open your messages",
+      "helper": "Your words work with the key saved on this device.",
+      "content": [
+        "First word",
+        "Second word",
+        "Third word"
+      ],
+      "primary": {
+        "label": "Open my messages",
+        "action": "exchange_device_proof_then:C09",
+        "alreadyInContent": false
+      },
+      "secondary": "Use my return card → card_exchange",
+      "dependency": "secure_return_device_and_card",
+      "specificRules": "If no device proof is present, explain that words alone cannot open messages and promote Use my return card. Provide existing secure-code entry during migration. Wrong words, expired and revoked records share a generic error.",
+      "layout": "child_single_column",
+      "states": [
+        "loading",
+        "ready",
+        "empty_if_applicable",
+        "permission_denied",
+        "offline",
+        "submission_pending",
+        "submission_unconfirmed",
+        "server_rejected",
+        "expired_access"
+      ],
+      "successRule": "Never infer success from time elapsed, a click, or a local state toggle. Use the actual committed API outcome."
+    },
+    {
+      "id": "C09",
+      "route": "/conversation",
+      "title": "Your messages",
+      "helper": "You can send a message now. A support worker may reply later.",
+      "content": [
+        "Message history from API",
+        "Type a message",
+        "Record my voice"
+      ],
+      "primary": {
+        "label": "Send message",
+        "action": "commit_message_and_refresh_history",
+        "alreadyInContent": false
+      },
+      "secondary": "My reply choice → C04_in_settings_mode",
+      "dependency": "private_messages",
+      "specificRules": "Only committed API messages populate history. Send requires text or ready audio. When closed, replace composer with read-only history and Ask for help again. Changing reply choice opens C04 in settings mode. No private push.",
+      "layout": "child_single_column",
+      "states": [
+        "loading",
+        "ready",
+        "empty_if_applicable",
+        "permission_denied",
+        "offline",
+        "submission_pending",
+        "submission_unconfirmed",
+        "server_rejected",
+        "expired_access"
+      ],
+      "successRule": "Never infer success from time elapsed, a click, or a local state toggle. Use the actual committed API outcome."
+    },
+    {
+      "id": "C10",
+      "route": "/help/another-team",
+      "title": "Would you like a different team?",
+      "helper": "You can ask for help from someone outside this place.",
+      "content": [
+        "Yes",
+        "No",
+        "I am not sure",
+        "Skip"
+      ],
+      "primary": {
+        "label": "Continue",
+        "action": "resolve_independent_team_then_return_to_origin",
+        "alreadyInContent": false
+      },
+      "secondary": "Back → originating screen",
+      "dependency": "independent_routing",
+      "specificRules": "Store the originating route. Yes requests independent routing; No or Skip retains the existing routing choice. Not sure explains the independent option without accusing the venue. If no independent team is available, show verified alternatives before collecting more information.",
+      "layout": "child_single_column",
+      "states": [
+        "loading",
+        "ready",
+        "empty_if_applicable",
+        "permission_denied",
+        "offline",
+        "submission_pending",
+        "submission_unconfirmed",
+        "server_rejected",
+        "expired_access"
+      ],
+      "successRule": "Never infer success from time elapsed, a click, or a local state toggle. Use the actual committed API outcome."
+    },
+    {
+      "id": "C11",
+      "route": "/help/options",
+      "title": "Other ways to get help",
+      "helper": "Calling may appear in your phone’s call history.",
+      "content": [
+        "Call 1098 for child support",
+        "Call 112 for immediate danger"
+      ],
+      "primary": {
+        "label": "Back to my message",
+        "action": "navigate:originating_screen",
+        "alreadyInContent": false
+      },
+      "secondary": "Leave this page → quick_exit",
+      "dependency": "verified_local_resources",
+      "specificRules": "Each phone number is its own tel link with a visible number and purpose. Do not turn Back into a call. Static resource content does not need a fake loading state.",
+      "layout": "child_single_column",
+      "states": [
+        "loading",
+        "ready",
+        "empty_if_applicable",
+        "permission_denied",
+        "offline",
+        "submission_pending",
+        "submission_unconfirmed",
+        "server_rejected",
+        "expired_access"
+      ],
+      "successRule": "Never infer success from time elapsed, a click, or a local state toggle. Use the actual committed API outcome."
+    },
+    {
+      "id": "C12",
+      "route": "/privacy",
+      "title": "You choose what to share",
+      "helper": "You do not need to give your name.",
+      "content": [
+        "Who can read or hear it",
+        "What stays on this device",
+        "How to leave and come back"
+      ],
+      "primary": {
+        "label": "Back",
+        "action": "navigate:originating_screen",
+        "alreadyInContent": false
+      },
+      "secondary": "Listen → explicit_local_or_public_audio",
+      "dependency": "reviewed_privacy_copy",
+      "specificRules": "This is static reviewed content with real operator details. No fake network request or auth gate. Never autoplay Listen.",
+      "layout": "child_single_column",
+      "states": [
+        "loading",
+        "ready",
+        "empty_if_applicable",
+        "permission_denied",
+        "offline",
+        "submission_pending",
+        "submission_unconfirmed",
+        "server_rejected",
+        "expired_access"
+      ],
+      "successRule": "Never infer success from time elapsed, a click, or a local state toggle. Use the actual committed API outcome."
+    },
+    {
+      "id": "M01",
+      "route": "/missing/start",
+      "title": "Who are you worried about?",
+      "helper": "Tell us what you know. It is okay to be unsure.",
+      "content": [
+        "A child is missing",
+        "I saw a child who may need help",
+        "I am lost"
+      ],
+      "primary": {
+        "label": "Next",
+        "action": "missing_then:M02;lost_then:C02;concern_then:C03",
+        "alreadyInContent": false
+      },
+      "secondary": "Back → C01",
+      "dependency": "real_routing",
+      "specificRules": "A child is missing goes to M02. I saw a child who may need help opens the concern flow; it must not require a known alert ID. I am lost opens child help with optional safe location and no public posting.",
+      "layout": "child_single_column",
+      "states": [
+        "loading",
+        "ready",
+        "empty_if_applicable",
+        "permission_denied",
+        "offline",
+        "submission_pending",
+        "submission_unconfirmed",
+        "server_rejected",
+        "expired_access"
+      ],
+      "successRule": "Never infer success from time elapsed, a click, or a local state toggle. Use the actual committed API outcome."
+    },
+    {
+      "id": "M02",
+      "route": "/missing/message",
+      "title": "What do you know?",
+      "helper": "A short message is enough to start.",
+      "content": [
+        "Type a message",
+        "Record my voice",
+        "Help me explain"
+      ],
+      "primary": {
+        "label": "Next",
+        "action": "save_memory_draft_then:M03",
+        "alreadyInContent": false
+      },
+      "secondary": "Back → M01",
+      "dependency": "minimal_private_intake",
+      "specificRules": "Use the domain-specific validation and permission requirements in the parent UI specification.",
+      "layout": "child_single_column",
+      "states": [
+        "loading",
+        "ready",
+        "empty_if_applicable",
+        "permission_denied",
+        "offline",
+        "submission_pending",
+        "submission_unconfirmed",
+        "server_rejected",
+        "expired_access"
+      ],
+      "successRule": "Never infer success from time elapsed, a click, or a local state toggle. Use the actual committed API outcome."
+    },
+    {
+      "id": "M03",
+      "route": "/missing/place",
+      "title": "Where were they last seen?",
+      "helper": "Your phone may be somewhere different.",
+      "content": [
+        "Choose a place",
+        "Use my location once",
+        "I do not know"
+      ],
+      "primary": {
+        "label": "Next",
+        "action": "confirm_last_seen_place_then:M04",
+        "alreadyInContent": false
+      },
+      "secondary": "Back → M02",
+      "dependency": "supported_areas;location_optional",
+      "specificRules": "Use my location once is not automatically last-seen location. Always ask the reporter to confirm/correct it. I do not know is valid.",
+      "layout": "child_single_column",
+      "states": [
+        "loading",
+        "ready",
+        "empty_if_applicable",
+        "permission_denied",
+        "offline",
+        "submission_pending",
+        "submission_unconfirmed",
+        "server_rejected",
+        "expired_access"
+      ],
+      "successRule": "Never infer success from time elapsed, a click, or a local state toggle. Use the actual committed API outcome."
+    },
+    {
+      "id": "M04",
+      "route": "/missing/review",
+      "title": "Check what you are sending",
+      "helper": "The team reviews this before sharing an alert.",
+      "content": [
+        "Your message — Change",
+        "Place and time — Change",
+        "Receiving team"
+      ],
+      "primary": {
+        "label": "Send privately",
+        "action": "commit_private_missing_report_then:M05",
+        "alreadyInContent": false
+      },
+      "secondary": "Back → M03",
+      "dependency": "private_case_commit",
+      "specificRules": "Use the domain-specific validation and permission requirements in the parent UI specification.",
+      "layout": "child_single_column",
+      "states": [
+        "loading",
+        "ready",
+        "empty_if_applicable",
+        "permission_denied",
+        "offline",
+        "submission_pending",
+        "submission_unconfirmed",
+        "server_rejected",
+        "expired_access"
+      ],
+      "successRule": "Never infer success from time elapsed, a click, or a local state toggle. Use the actual committed API outcome."
+    },
+    {
+      "id": "M05",
+      "route": "/missing/received",
+      "title": "Your message was received.",
+      "helper": "This has not automatically created a public alert.",
+      "content": [
+        "Choose how to come back",
+        "Other ways to get help"
+      ],
+      "primary": {
+        "label": "Choose how to come back",
+        "action": "navigate:C07",
+        "alreadyInContent": false
+      },
+      "secondary": "Other ways to get help → C11",
+      "dependency": "durable_receipt",
+      "specificRules": "Private receipt only. Do not offer public sharing of the report or a fabricated alert link.",
+      "layout": "child_single_column",
+      "states": [
+        "loading",
+        "ready",
+        "empty_if_applicable",
+        "permission_denied",
+        "offline",
+        "submission_pending",
+        "submission_unconfirmed",
+        "server_rejected",
+        "expired_access"
+      ],
+      "successRule": "Never infer success from time elapsed, a click, or a local state toggle. Use the actual committed API outcome."
+    },
+    {
+      "id": "A01",
+      "route": "/alerts",
+      "title": "Nearby missing-child alerts",
+      "helper": "Choose an area to read current alerts.",
+      "content": [
+        "Search area",
+        "Use my location once",
+        "Current alerts from API"
+      ],
+      "primary": {
+        "label": "Choose an area",
+        "action": "select_area_and_refresh_feed",
+        "alreadyInContent": false
+      },
+      "secondary": "Get alerts for my area → A05",
+      "dependency": "public_alerts_and_areas",
+      "specificRules": "No area chosen can read the actual available feed; enrollment requires a chosen area. Choose an area is a selection control, not a Send request. Cards contain real active alerts or an honest empty state.",
+      "layout": "child_single_column",
+      "states": [
+        "loading",
+        "ready",
+        "empty_if_applicable",
+        "permission_denied",
+        "offline",
+        "submission_pending",
+        "submission_unconfirmed",
+        "server_rejected",
+        "expired_access"
+      ],
+      "successRule": "Never infer success from time elapsed, a click, or a local state toggle. Use the actual committed API outcome."
+    },
+    {
+      "id": "A02",
+      "route": "/alerts/{id}",
+      "title": "Read this alert",
+      "helper": "Use the latest details shown here.",
+      "content": [
+        "Reviewed details from API",
+        "Area and last seen time",
+        "Issuer and last updated time"
+      ],
+      "primary": {
+        "label": "I saw something",
+        "action": "navigate:A03",
+        "alreadyInContent": false
+      },
+      "secondary": "Share this link → native_share_or_copy_after_tap",
+      "dependency": "active_public_alert",
+      "specificRules": "Only ACTIVE unexpired current alerts show identifying details and I saw something. Terminal alerts instead show ended text; no share-identifying-details or sighting action. Unknown status hides stale details and offers Retry.",
+      "layout": "child_single_column",
+      "states": [
+        "loading",
+        "ready",
+        "empty_if_applicable",
+        "permission_denied",
+        "offline",
+        "submission_pending",
+        "submission_unconfirmed",
+        "server_rejected",
+        "expired_access"
+      ],
+      "successRule": "Never infer success from time elapsed, a click, or a local state toggle. Use the actual committed API outcome."
+    },
+    {
+      "id": "A03",
+      "route": "/alerts/{id}/sighting",
+      "title": "What did you see?",
+      "helper": "Do not follow or confront anyone.",
+      "content": [
+        "Type or record what you saw",
+        "Approximate place and time — optional"
+      ],
+      "primary": {
+        "label": "Send privately",
+        "action": "commit_tip_idempotently_then:A04",
+        "alreadyInContent": false
+      },
+      "secondary": "Back → A02",
+      "dependency": "active_alert_private_tip_api",
+      "specificRules": "Use the domain-specific validation and permission requirements in the parent UI specification.",
+      "layout": "child_single_column",
+      "states": [
+        "loading",
+        "ready",
+        "empty_if_applicable",
+        "permission_denied",
+        "offline",
+        "submission_pending",
+        "submission_unconfirmed",
+        "server_rejected",
+        "expired_access"
+      ],
+      "successRule": "Never infer success from time elapsed, a click, or a local state toggle. Use the actual committed API outcome."
+    },
+    {
+      "id": "A04",
+      "route": "/alerts/{id}/sighting/received",
+      "title": "Your message was received.",
+      "helper": "The reviewing team may not have read it yet.",
+      "content": [
+        "Receipt saved by server"
+      ],
+      "primary": {
+        "label": "Back to the alert",
+        "action": "navigate:A02",
+        "alreadyInContent": false
+      },
+      "secondary": "Share another observation → A03_new_operation",
+      "dependency": "durable_tip_receipt",
+      "specificRules": "Require a real tip receipt; no Back leading to accidental resubmission. Share another observation creates a new operation only after the previous operation is confirmed.",
+      "layout": "child_single_column",
+      "states": [
+        "loading",
+        "ready",
+        "empty_if_applicable",
+        "permission_denied",
+        "offline",
+        "submission_pending",
+        "submission_unconfirmed",
+        "server_rejected",
+        "expired_access"
+      ],
+      "successRule": "Never infer success from time elapsed, a click, or a local state toggle. Use the actual committed API outcome."
+    },
+    {
+      "id": "A05",
+      "route": "/alerts/notifications",
+      "title": "Get alerts for this area",
+      "helper": "Public alerts may appear on your lock screen.",
+      "content": [
+        "Choose an area",
+        "Confirm notification consent",
+        "Device support guidance when needed"
+      ],
+      "primary": {
+        "label": "Allow notifications",
+        "action": "request_permission_then_register_subscription",
+        "alreadyInContent": false
+      },
+      "secondary": "Not now → A01",
+      "dependency": "enrollment_available_and_supported_device",
+      "specificRules": "Require area and explicit consent before OS permission. Unsupported/denied state offers reading and device-specific instructions. Never call notifications on until both browser and server registration succeed.",
+      "layout": "child_single_column",
+      "states": [
+        "loading",
+        "ready",
+        "empty_if_applicable",
+        "permission_denied",
+        "offline",
+        "submission_pending",
+        "submission_unconfirmed",
+        "server_rejected",
+        "expired_access"
+      ],
+      "successRule": "Never infer success from time elapsed, a click, or a local state toggle. Use the actual committed API outcome."
+    },
+    {
+      "id": "A06",
+      "route": "/alerts/settings",
+      "title": "Your alert settings",
+      "helper": "These settings only affect this browser.",
+      "content": [
+        "Saved area from API",
+        "Permission state",
+        "Change area"
+      ],
+      "primary": {
+        "label": "Stop notifications",
+        "action": "revoke_server_then_unsubscribe_browser",
+        "alreadyInContent": false
+      },
+      "secondary": "Back to alerts → A01",
+      "dependency": "existing_subscription_management",
+      "specificRules": "Stop stays available when enrollment is disabled. If only browser unsubscribe or only server revoke succeeds, explain partial completion and Retry. Change area commits on server before changing the confirmed display.",
+      "layout": "child_single_column",
+      "states": [
+        "loading",
+        "ready",
+        "empty_if_applicable",
+        "permission_denied",
+        "offline",
+        "submission_pending",
+        "submission_unconfirmed",
+        "server_rejected",
+        "expired_access"
+      ],
+      "successRule": "Never infer success from time elapsed, a click, or a local state toggle. Use the actual committed API outcome."
+    },
+    {
+      "id": "S01",
+      "route": "/sign-in",
+      "title": "Staff sign in",
+      "helper": "Use your own staff account.",
+      "content": [
+        "Username or organization sign-in",
+        "Password when session auth is deployed",
+        "Show password"
+      ],
+      "primary": {
+        "label": "Sign in",
+        "action": "deployed_auth_then:S02",
+        "alreadyInContent": false
+      },
+      "secondary": "Back to Bal Setu → public_home",
+      "dependency": "deployed_staff_auth",
+      "specificRules": "No Sign out control before sign-in. Use the real deployed auth method; do not render both unrelated login forms. Recovery must be supported by that method, not a dead link.",
+      "layout": "staff_list_detail",
+      "states": [
+        "loading",
+        "ready",
+        "empty_if_applicable",
+        "permission_denied",
+        "offline",
+        "submission_pending",
+        "submission_unconfirmed",
+        "server_rejected",
+        "expired_access"
+      ],
+      "successRule": "Never infer success from time elapsed, a click, or a local state toggle. Use the actual committed API outcome."
+    },
+    {
+      "id": "S02",
+      "route": "/cases",
+      "title": "My work",
+      "helper": "Open a request to see what needs attention.",
+      "content": [
+        "New",
+        "Waiting for me",
+        "Waiting for child",
+        "Escalated",
+        "Authorized queue from API"
+      ],
+      "primary": {
+        "label": "Open request",
+        "action": "select_authorized_case_then:S03",
+        "alreadyInContent": false
+      },
+      "secondary": "Alert review → S10",
+      "dependency": "staff_case_scope",
+      "specificRules": "The Open request action lives on each actual authorized queue item, not an orphan footer button with no selected case. Empty queue has no invented request.",
+      "layout": "staff_list_detail",
+      "states": [
+        "loading",
+        "ready",
+        "empty_if_applicable",
+        "permission_denied",
+        "offline",
+        "submission_pending",
+        "submission_unconfirmed",
+        "server_rejected",
+        "expired_access"
+      ],
+      "successRule": "Never infer success from time elapsed, a click, or a local state toggle. Use the actual committed API outcome."
+    },
+    {
+      "id": "S03",
+      "route": "/cases/{id}",
+      "title": "Request details",
+      "helper": "Read or listen before responding.",
+      "content": [
+        "Original message",
+        "Reply permission",
+        "Team and assignment",
+        "Actual timeline"
+      ],
+      "primary": {
+        "label": "Open conversation",
+        "action": "navigate:S06",
+        "alreadyInContent": false
+      },
+      "secondary": "Assign → S04; Accept → S05 when eligible",
+      "dependency": "case_permission",
+      "specificRules": "Use the domain-specific validation and permission requirements in the parent UI specification.",
+      "layout": "staff_list_detail",
+      "states": [
+        "loading",
+        "ready",
+        "empty_if_applicable",
+        "permission_denied",
+        "offline",
+        "submission_pending",
+        "submission_unconfirmed",
+        "server_rejected",
+        "expired_access"
+      ],
+      "successRule": "Never infer success from time elapsed, a click, or a local state toggle. Use the actual committed API outcome."
+    },
+    {
+      "id": "S04",
+      "route": "/cases/{id}/assign",
+      "title": "Choose a responder",
+      "helper": "Choose someone who can take responsibility.",
+      "content": [
+        "Eligible active responders from API"
+      ],
+      "primary": {
+        "label": "Assign request",
+        "action": "atomic_assignment_then:S03",
+        "alreadyInContent": false
+      },
+      "secondary": "Cancel → S03",
+      "dependency": "supervisor_scope",
+      "specificRules": "Use the domain-specific validation and permission requirements in the parent UI specification.",
+      "layout": "staff_list_detail",
+      "states": [
+        "loading",
+        "ready",
+        "empty_if_applicable",
+        "permission_denied",
+        "offline",
+        "submission_pending",
+        "submission_unconfirmed",
+        "server_rejected",
+        "expired_access"
+      ],
+      "successRule": "Never infer success from time elapsed, a click, or a local state toggle. Use the actual committed API outcome."
+    },
+    {
+      "id": "S05",
+      "route": "/assignments/{id}/accept",
+      "title": "Accept this request",
+      "helper": "Your acceptance tells the team you are taking responsibility.",
+      "content": [
+        "Case and assignment summary"
+      ],
+      "primary": {
+        "label": "Accept request",
+        "action": "atomic_acceptance_then:S06",
+        "alreadyInContent": false
+      },
+      "secondary": "Back → S03",
+      "dependency": "current_assignment",
+      "specificRules": "Use the domain-specific validation and permission requirements in the parent UI specification.",
+      "layout": "staff_list_detail",
+      "states": [
+        "loading",
+        "ready",
+        "empty_if_applicable",
+        "permission_denied",
+        "offline",
+        "submission_pending",
+        "submission_unconfirmed",
+        "server_rejected",
+        "expired_access"
+      ],
+      "successRule": "Never infer success from time elapsed, a click, or a local state toggle. Use the actual committed API outcome."
+    },
+    {
+      "id": "S06",
+      "route": "/cases/{id}/conversation",
+      "title": "Conversation",
+      "helper": "Sound may be heard by people nearby.",
+      "content": [
+        "Actual message history",
+        "Reply to child / Private team note",
+        "Type or record",
+        "Text equivalent for a voice reply"
+      ],
+      "primary": {
+        "label": "Send reply",
+        "action": "scoped_message_commit",
+        "alreadyInContent": false
+      },
+      "secondary": "Transfer or escalate → S07",
+      "dependency": "case_permission_and_reply_consent",
+      "specificRules": "Private team note mode changes primary label to Save team note and uses note visibility. Reply mode requires child permission; voice reply requires a typed equivalent. A note can never be sent to the child by changing CSS only.",
+      "layout": "staff_list_detail",
+      "states": [
+        "loading",
+        "ready",
+        "empty_if_applicable",
+        "permission_denied",
+        "offline",
+        "submission_pending",
+        "submission_unconfirmed",
+        "server_rejected",
+        "expired_access"
+      ],
+      "successRule": "Never infer success from time elapsed, a click, or a local state toggle. Use the actual committed API outcome."
+    },
+    {
+      "id": "S07",
+      "route": "/cases/{id}/transfer",
+      "title": "Ask another team for help",
+      "helper": "Keep responsibility until the receiving team accepts.",
+      "content": [
+        "Authorized receiving team",
+        "Reason",
+        "Minimum necessary summary"
+      ],
+      "primary": {
+        "label": "Request transfer",
+        "action": "create_transfer_and_show_pending_ack",
+        "alreadyInContent": false
+      },
+      "secondary": "Cancel → S03",
+      "dependency": "authorized_transfer_targets",
+      "specificRules": "Use the domain-specific validation and permission requirements in the parent UI specification.",
+      "layout": "staff_list_detail",
+      "states": [
+        "loading",
+        "ready",
+        "empty_if_applicable",
+        "permission_denied",
+        "offline",
+        "submission_pending",
+        "submission_unconfirmed",
+        "server_rejected",
+        "expired_access"
+      ],
+      "successRule": "Never infer success from time elapsed, a click, or a local state toggle. Use the actual committed API outcome."
+    },
+    {
+      "id": "S08",
+      "route": "/cases/{id}/close",
+      "title": "Close this request",
+      "helper": "Closing a request does not mean the child is no longer at risk.",
+      "content": [
+        "Reason",
+        "Child-visible message if allowed",
+        "Remaining support options"
+      ],
+      "primary": {
+        "label": "Close request",
+        "action": "confirmed_closure_then:S03",
+        "alreadyInContent": false
+      },
+      "secondary": "Cancel → S03",
+      "dependency": "closure_permission",
+      "specificRules": "Use the domain-specific validation and permission requirements in the parent UI specification.",
+      "layout": "staff_list_detail",
+      "states": [
+        "loading",
+        "ready",
+        "empty_if_applicable",
+        "permission_denied",
+        "offline",
+        "submission_pending",
+        "submission_unconfirmed",
+        "server_rejected",
+        "expired_access"
+      ],
+      "successRule": "Never infer success from time elapsed, a click, or a local state toggle. Use the actual committed API outcome."
+    },
+    {
+      "id": "S09",
+      "route": "/alerts/{id}/tips",
+      "title": "Private sightings",
+      "helper": "These observations are not public.",
+      "content": [
+        "Authorized tips from API",
+        "Listen on tap",
+        "Follow-up status"
+      ],
+      "primary": {
+        "label": "Mark reviewed",
+        "action": "versioned_tip_review",
+        "alreadyInContent": false
+      },
+      "secondary": "Back to alert → S12",
+      "dependency": "issuer_tip_permission",
+      "specificRules": "Use the domain-specific validation and permission requirements in the parent UI specification.",
+      "layout": "staff_list_detail",
+      "states": [
+        "loading",
+        "ready",
+        "empty_if_applicable",
+        "permission_denied",
+        "offline",
+        "submission_pending",
+        "submission_unconfirmed",
+        "server_rejected",
+        "expired_access"
+      ],
+      "successRule": "Never infer success from time elapsed, a click, or a local state toggle. Use the actual committed API outcome."
+    },
+    {
+      "id": "S10",
+      "route": "/alerts/new",
+      "title": "Prepare a public alert",
+      "helper": "Only approved details will be shared.",
+      "content": [
+        "Case selection",
+        "Minimum public description",
+        "Reviewed area",
+        "Expiry",
+        "Verification basis",
+        "Public preview"
+      ],
+      "primary": {
+        "label": "Send for review",
+        "action": "create_revision_then:S11_pending",
+        "alreadyInContent": false
+      },
+      "secondary": "Save draft → persist_unpublished_draft",
+      "dependency": "alert_preparer",
+      "specificRules": "A pending/approved revision cannot be silently edited in place. Public photo/description needs actual verification, never generated child imagery.",
+      "layout": "staff_list_detail",
+      "states": [
+        "loading",
+        "ready",
+        "empty_if_applicable",
+        "permission_denied",
+        "offline",
+        "submission_pending",
+        "submission_unconfirmed",
+        "server_rejected",
+        "expired_access"
+      ],
+      "successRule": "Never infer success from time elapsed, a click, or a local state toggle. Use the actual committed API outcome."
+    },
+    {
+      "id": "S11",
+      "route": "/alerts/{id}/review",
+      "title": "Review this alert",
+      "helper": "Check the exact information people will see.",
+      "content": [
+        "Public preview",
+        "Private verification basis",
+        "Area and expiry",
+        "Publication risks"
+      ],
+      "primary": {
+        "label": "Approve this revision",
+        "action": "independent_approval_then:S12",
+        "alreadyInContent": false
+      },
+      "secondary": "Reject with reason → revision_rejected",
+      "dependency": "independent_alert_approver",
+      "specificRules": "Preparer cannot approve. If revision is already approved/rejected, show its actual state and allowed next action, not an always-enabled Approve button.",
+      "layout": "staff_list_detail",
+      "states": [
+        "loading",
+        "ready",
+        "empty_if_applicable",
+        "permission_denied",
+        "offline",
+        "submission_pending",
+        "submission_unconfirmed",
+        "server_rejected",
+        "expired_access"
+      ],
+      "successRule": "Never infer success from time elapsed, a click, or a local state toggle. Use the actual committed API outcome."
+    },
+    {
+      "id": "S12",
+      "route": "/alerts/{id}/manage",
+      "title": "Manage this alert",
+      "helper": "Publication and notification delivery are different states.",
+      "content": [
+        "Approved preview",
+        "Audience estimate",
+        "Delivery state",
+        "Expiry"
+      ],
+      "primary": {
+        "label": "Publish alert",
+        "action": "confirm_then_atomic_activate",
+        "alreadyInContent": false
+      },
+      "secondary": "Withdraw / Resolve → terminal_state_confirmation",
+      "dependency": "approved_immutable_revision",
+      "specificRules": "Publish only for the approved unpublished revision. ACTIVE shows Withdraw and Resolve, plus real delivery state. Terminal states remove activation controls. Each destructive state change has confirmation and server permission checks.",
+      "layout": "staff_list_detail",
+      "states": [
+        "loading",
+        "ready",
+        "empty_if_applicable",
+        "permission_denied",
+        "offline",
+        "submission_pending",
+        "submission_unconfirmed",
+        "server_rejected",
+        "expired_access"
+      ],
+      "successRule": "Never infer success from time elapsed, a click, or a local state toggle. Use the actual committed API outcome."
+    },
+    {
+      "id": "S13",
+      "route": "/settings/service",
+      "title": "Service settings",
+      "helper": "Only display coverage the team can actually provide.",
+      "content": [
+        "Operator details",
+        "Intake availability",
+        "Independent routing",
+        "Reviewed languages",
+        "Feature states"
+      ],
+      "primary": {
+        "label": "Save settings",
+        "action": "authorized_versioned_config_update",
+        "alreadyInContent": false
+      },
+      "secondary": "Cancel → S02",
+      "dependency": "operator_admin",
+      "specificRules": "Only authorized operator sees these controls. Missing settings are unknown, not defaults that enable intake. Use expected versions to avoid overwriting other operator changes.",
+      "layout": "staff_list_detail",
+      "states": [
+        "loading",
+        "ready",
+        "empty_if_applicable",
+        "permission_denied",
+        "offline",
+        "submission_pending",
+        "submission_unconfirmed",
+        "server_rejected",
+        "expired_access"
+      ],
+      "successRule": "Never infer success from time elapsed, a click, or a local state toggle. Use the actual committed API outcome."
+    },
+    {
+      "id": "S14",
+      "route": "/settings/access",
+      "title": "Staff and area access",
+      "helper": "Keep access limited to current responsibilities.",
+      "content": [
+        "Active people and roles",
+        "Organizations",
+        "Reviewed areas",
+        "Entry points"
+      ],
+      "primary": {
+        "label": "Save changes",
+        "action": "audited_role_or_area_mutation",
+        "alreadyInContent": false
+      },
+      "secondary": "Cancel → S02",
+      "dependency": "access_admin",
+      "specificRules": "Only authorized access admin sees editable grants/areas. Role removal must invalidate dependent access. Do not fabricate an eligible responder when list is empty.",
+      "layout": "staff_list_detail",
+      "states": [
+        "loading",
+        "ready",
+        "empty_if_applicable",
+        "permission_denied",
+        "offline",
+        "submission_pending",
+        "submission_unconfirmed",
+        "server_rejected",
+        "expired_access"
+      ],
+      "successRule": "Never infer success from time elapsed, a click, or a local state toggle. Use the actual committed API outcome."
+    },
+    {
+      "id": "S15",
+      "route": "/sign-out",
+      "title": "End staff access",
+      "helper": "Signing out ends access on this browser.",
+      "content": [
+        "Unsaved work warning if relevant"
+      ],
+      "primary": {
+        "label": "Sign out",
+        "action": "revoke_session_clear_private_memory_then:S01",
+        "alreadyInContent": false
+      },
+      "secondary": "Cancel → originating_staff_screen",
+      "dependency": "staff_session",
+      "specificRules": "Use real revocation. On failure hide local private state but say remote sign-out could not be confirmed; do not continue showing case details.",
+      "layout": "staff_list_detail",
+      "states": [
+        "loading",
+        "ready",
+        "empty_if_applicable",
+        "permission_denied",
+        "offline",
+        "submission_pending",
+        "submission_unconfirmed",
+        "server_rejected",
+        "expired_access"
+      ],
+      "successRule": "Never infer success from time elapsed, a click, or a local state toggle. Use the actual committed API outcome."
+    }
+  ]
+}

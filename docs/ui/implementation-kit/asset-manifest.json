@@ -1,0 +1,347 @@
+{
+  "version": 1,
+  "assets": [
+    {
+      "id": "help",
+      "path": "assets/icons/help.svg",
+      "kind": "editable_svg_icon",
+      "dimensions": "24x24 viewBox",
+      "alt": "Empty when adjacent text labels the control",
+      "placement": "Use only with visible action text",
+      "origin": "Original vector UI geometry authored for this project"
+    },
+    {
+      "id": "messages",
+      "path": "assets/icons/messages.svg",
+      "kind": "editable_svg_icon",
+      "dimensions": "24x24 viewBox",
+      "alt": "Empty when adjacent text labels the control",
+      "placement": "Use only with visible action text",
+      "origin": "Original vector UI geometry authored for this project"
+    },
+    {
+      "id": "missing",
+      "path": "assets/icons/missing.svg",
+      "kind": "editable_svg_icon",
+      "dimensions": "24x24 viewBox",
+      "alt": "Empty when adjacent text labels the control",
+      "placement": "Use only with visible action text",
+      "origin": "Original vector UI geometry authored for this project"
+    },
+    {
+      "id": "alerts",
+      "path": "assets/icons/alerts.svg",
+      "kind": "editable_svg_icon",
+      "dimensions": "24x24 viewBox",
+      "alt": "Empty when adjacent text labels the control",
+      "placement": "Use only with visible action text",
+      "origin": "Original vector UI geometry authored for this project"
+    },
+    {
+      "id": "microphone",
+      "path": "assets/icons/microphone.svg",
+      "kind": "editable_svg_icon",
+      "dimensions": "24x24 viewBox",
+      "alt": "Empty when adjacent text labels the control",
+      "placement": "Use only with visible action text",
+      "origin": "Original vector UI geometry authored for this project"
+    },
+    {
+      "id": "play",
+      "path": "assets/icons/play.svg",
+      "kind": "editable_svg_icon",
+      "dimensions": "24x24 viewBox",
+      "alt": "Empty when adjacent text labels the control",
+      "placement": "Use only with visible action text",
+      "origin": "Original vector UI geometry authored for this project"
+    },
+    {
+      "id": "pause",
+      "path": "assets/icons/pause.svg",
+      "kind": "editable_svg_icon",
+      "dimensions": "24x24 viewBox",
+      "alt": "Empty when adjacent text labels the control",
+      "placement": "Use only with visible action text",
+      "origin": "Original vector UI geometry authored for this project"
+    },
+    {
+      "id": "stop",
+      "path": "assets/icons/stop.svg",
+      "kind": "editable_svg_icon",
+      "dimensions": "24x24 viewBox",
+      "alt": "Empty when adjacent text labels the control",
+      "placement": "Use only with visible action text",
+      "origin": "Original vector UI geometry authored for this project"
+    },
+    {
+      "id": "listen",
+      "path": "assets/icons/listen.svg",
+      "kind": "editable_svg_icon",
+      "dimensions": "24x24 viewBox",
+      "alt": "Empty when adjacent text labels the control",
+      "placement": "Use only with visible action text",
+      "origin": "Original vector UI geometry authored for this project"
+    },
+    {
+      "id": "location",
+      "path": "assets/icons/location.svg",
+      "kind": "editable_svg_icon",
+      "dimensions": "24x24 viewBox",
+      "alt": "Empty when adjacent text labels the control",
+      "placement": "Use only with visible action text",
+      "origin": "Original vector UI geometry authored for this project"
+    },
+    {
+      "id": "back",
+      "path": "assets/icons/back.svg",
+      "kind": "editable_svg_icon",
+      "dimensions": "24x24 viewBox",
+      "alt": "Empty when adjacent text labels the control",
+      "placement": "Use only with visible action text",
+      "origin": "Original vector UI geometry authored for this project"
+    },
+    {
+      "id": "next",
+      "path": "assets/icons/next.svg",
+      "kind": "editable_svg_icon",
+      "dimensions": "24x24 viewBox",
+      "alt": "Empty when adjacent text labels the control",
+      "placement": "Use only with visible action text",
+      "origin": "Original vector UI geometry authored for this project"
+    },
+    {
+      "id": "exit",
+      "path": "assets/icons/exit.svg",
+      "kind": "editable_svg_icon",
+      "dimensions": "24x24 viewBox",
+      "alt": "Empty when adjacent text labels the control",
+      "placement": "Use only with visible action text",
+      "origin": "Original vector UI geometry authored for this project"
+    },
+    {
+      "id": "language",
+      "path": "assets/icons/language.svg",
+      "kind": "editable_svg_icon",
+      "dimensions": "24x24 viewBox",
+      "alt": "Empty when adjacent text labels the control",
+      "placement": "Use only with visible action text",
+      "origin": "Original vector UI geometry authored for this project"
+    },
+    {
+      "id": "check",
+      "path": "assets/icons/check.svg",
+      "kind": "editable_svg_icon",
+      "dimensions": "24x24 viewBox",
+      "alt": "Empty when adjacent text labels the control",
+      "placement": "Use only with visible action text",
+      "origin": "Original vector UI geometry authored for this project"
+    },
+    {
+      "id": "retry",
+      "path": "assets/icons/retry.svg",
+      "kind": "editable_svg_icon",
+      "dimensions": "24x24 viewBox",
+      "alt": "Empty when adjacent text labels the control",
+      "placement": "Use only with visible action text",
+      "origin": "Original vector UI geometry authored for this project"
+    },
+    {
+      "id": "close",
+      "path": "assets/icons/close.svg",
+      "kind": "editable_svg_icon",
+      "dimensions": "24x24 viewBox",
+      "alt": "Empty when adjacent text labels the control",
+      "placement": "Use only with visible action text",
+      "origin": "Original vector UI geometry authored for this project"
+    },
+    {
+      "id": "privacy",
+      "path": "assets/icons/privacy.svg",
+      "kind": "editable_svg_icon",
+      "dimensions": "24x24 viewBox",
+      "alt": "Empty when adjacent text labels the control",
+      "placement": "Use only with visible action text",
+      "origin": "Original vector UI geometry authored for this project"
+    },
+    {
+      "id": "edit",
+      "path": "assets/icons/edit.svg",
+      "kind": "editable_svg_icon",
+      "dimensions": "24x24 viewBox",
+      "alt": "Empty when adjacent text labels the control",
+      "placement": "Use only with visible action text",
+      "origin": "Original vector UI geometry authored for this project"
+    },
+    {
+      "id": "send",
+      "path": "assets/icons/send.svg",
+      "kind": "editable_svg_icon",
+      "dimensions": "24x24 viewBox",
+      "alt": "Empty when adjacent text labels the control",
+      "placement": "Use only with visible action text",
+      "origin": "Original vector UI geometry authored for this project"
+    },
+    {
+      "id": "person",
+      "path": "assets/icons/person.svg",
+      "kind": "editable_svg_icon",
+      "dimensions": "24x24 viewBox",
+      "alt": "Empty when adjacent text labels the control",
+      "placement": "Use only with visible action text",
+      "origin": "Original vector UI geometry authored for this project"
+    },
+    {
+      "id": "clock",
+      "path": "assets/icons/clock.svg",
+      "kind": "editable_svg_icon",
+      "dimensions": "24x24 viewBox",
+      "alt": "Empty when adjacent text labels the control",
+      "placement": "Use only with visible action text",
+      "origin": "Original vector UI geometry authored for this project"
+    },
+    {
+      "id": "share",
+      "path": "assets/icons/share.svg",
+      "kind": "editable_svg_icon",
+      "dimensions": "24x24 viewBox",
+      "alt": "Empty when adjacent text labels the control",
+      "placement": "Use only with visible action text",
+      "origin": "Original vector UI geometry authored for this project"
+    },
+    {
+      "id": "bridge",
+      "path": "assets/icons/bridge.svg",
+      "kind": "editable_svg_icon",
+      "dimensions": "24x24 viewBox",
+      "alt": "Empty when adjacent text labels the control",
+      "placement": "Use only with visible action text",
+      "origin": "Original vector UI geometry authored for this project"
+    },
+    {
+      "id": "boat",
+      "path": "assets/icons/boat.svg",
+      "kind": "editable_svg_icon",
+      "dimensions": "24x24 viewBox",
+      "alt": "Empty when adjacent text labels the control",
+      "placement": "Use only with visible action text",
+      "origin": "Original vector UI geometry authored for this project"
+    },
+    {
+      "id": "cloud",
+      "path": "assets/icons/cloud.svg",
+      "kind": "editable_svg_icon",
+      "dimensions": "24x24 viewBox",
+      "alt": "Empty when adjacent text labels the control",
+      "placement": "Use only with visible action text",
+      "origin": "Original vector UI geometry authored for this project"
+    },
+    {
+      "id": "mango",
+      "path": "assets/icons/mango.svg",
+      "kind": "editable_svg_icon",
+      "dimensions": "24x24 viewBox",
+      "alt": "Empty when adjacent text labels the control",
+      "placement": "Use only with visible action text",
+      "origin": "Original vector UI geometry authored for this project"
+    },
+    {
+      "id": "leaf",
+      "path": "assets/icons/leaf.svg",
+      "kind": "editable_svg_icon",
+      "dimensions": "24x24 viewBox",
+      "alt": "Empty when adjacent text labels the control",
+      "placement": "Use only with visible action text",
+      "origin": "Original vector UI geometry authored for this project"
+    },
+    {
+      "id": "moon",
+      "path": "assets/icons/moon.svg",
+      "kind": "editable_svg_icon",
+      "dimensions": "24x24 viewBox",
+      "alt": "Empty when adjacent text labels the control",
+      "placement": "Use only with visible action text",
+      "origin": "Original vector UI geometry authored for this project"
+    },
+    {
+      "id": "star",
+      "path": "assets/icons/star.svg",
+      "kind": "editable_svg_icon",
+      "dimensions": "24x24 viewBox",
+      "alt": "Empty when adjacent text labels the control",
+      "placement": "Use only with visible action text",
+      "origin": "Original vector UI geometry authored for this project"
+    },
+    {
+      "id": "tree",
+      "path": "assets/icons/tree.svg",
+      "kind": "editable_svg_icon",
+      "dimensions": "24x24 viewBox",
+      "alt": "Empty when adjacent text labels the control",
+      "placement": "Use only with visible action text",
+      "origin": "Original vector UI geometry authored for this project"
+    },
+    {
+      "id": "book",
+      "path": "assets/icons/book.svg",
+      "kind": "editable_svg_icon",
+      "dimensions": "24x24 viewBox",
+      "alt": "Empty when adjacent text labels the control",
+      "placement": "Use only with visible action text",
+      "origin": "Original vector UI geometry authored for this project"
+    },
+    {
+      "id": "cup",
+      "path": "assets/icons/cup.svg",
+      "kind": "editable_svg_icon",
+      "dimensions": "24x24 viewBox",
+      "alt": "Empty when adjacent text labels the control",
+      "placement": "Use only with visible action text",
+      "origin": "Original vector UI geometry authored for this project"
+    },
+    {
+      "id": "kite",
+      "path": "assets/icons/kite.svg",
+      "kind": "editable_svg_icon",
+      "dimensions": "24x24 viewBox",
+      "alt": "Empty when adjacent text labels the control",
+      "placement": "Use only with visible action text",
+      "origin": "Original vector UI geometry authored for this project"
+    },
+    {
+      "id": "ball",
+      "path": "assets/icons/ball.svg",
+      "kind": "editable_svg_icon",
+      "dimensions": "24x24 viewBox",
+      "alt": "Empty when adjacent text labels the control",
+      "placement": "Use only with visible action text",
+      "origin": "Original vector UI geometry authored for this project"
+    },
+    {
+      "id": "fish",
+      "path": "assets/icons/fish.svg",
+      "kind": "editable_svg_icon",
+      "dimensions": "24x24 viewBox",
+      "alt": "Empty when adjacent text labels the control",
+      "placement": "Use only with visible action text",
+      "origin": "Original vector UI geometry authored for this project"
+    },
+    {
+      "id": "bal-setu-app-icon-master",
+      "path": "assets/bal-setu-app-icon-master.png",
+      "kind": "generated_raster_logo_derivative",
+      "alt": "Bal Setu when not accompanied by a text wordmark",
+      "placement": "Header 40px; app icon source",
+      "origin": "Built-in image edit of user supplied logo; raster master"
+    },
+    {
+      "id": "welcome-bridge",
+      "path": "assets/welcome-bridge.png",
+      "kind": "generated_raster_illustration",
+      "alt": "",
+      "placement": "Optional home decoration, max 320 CSS px; hide if it displaces primary help action",
+      "origin": "Built-in image generation; see ASSETS.md for prompt"
+    }
+  ],
+  "screenCount": 38,
+  "boardCount": 7
+}

@@ -1,5 +1,6 @@
 # AI implementation handoff
 ## Current design handoff — 13 September 2026
+For explicit file-level instructions and supplied assets, start with [the implementation kit](../ui/implementation-kit/START-HERE.md). It provides screen-by-screen recipes and bounded tasks; do not infer working backend behaviour from design boards.
 Read [the Bal Setu UI pack](../ui/README.md) and [its phased implementation prompt](../ui/07-phased-ai-implementation.md) first. They supersede conflicting target UX in older plans. Reconcile the user's referenced live deployment strategy before changing hosting or authentication. Three words require a device/recovery credential; remove fixed schedules only for newly consented in-app replies, not by widening legacy contact permission. Preserve staged staff-session work and existing migration history. The UI pack documents proposed capabilities, not completed implementation.
 
 The material below is the earlier engineering handoff and remains historical context.

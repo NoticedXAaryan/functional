@@ -1,0 +1,526 @@
+{
+  "locale": "en",
+  "status": "design_copy_requires_operator_review",
+  "common": {
+    "sourceStatus": "Design specification only; no real reports or success states are seeded.",
+    "layout": {
+      "phoneWidth": 390,
+      "minWidth": 320,
+      "contentMaxWidth": 640,
+      "gutterPhone": 16,
+      "gutterDesktop": 24,
+      "primaryMinHeight": 56,
+      "choiceMinHeight": 80,
+      "gap": 16,
+      "bodyFontPx": 18
+    },
+    "header": [
+      "Bal Setu",
+      "Language",
+      "Leave this page"
+    ],
+    "loading": "Connecting to the support service…",
+    "offline": "This has not been sent. Try again when you have internet.",
+    "unknownCommit": "We could not confirm it yet. Try again to check.",
+    "retry": "Try again",
+    "emptyFeed": "No alerts are published for this area right now.",
+    "emptyMessages": "No messages yet. You can leave a message here."
+  },
+  "C01": {
+    "title": "You can ask for help here.",
+    "helper": "You can type, use your voice, or choose a button.",
+    "choices": [
+      "Ask for help",
+      "My messages",
+      "Someone is missing",
+      "Nearby alerts"
+    ],
+    "primary": "Ask for help",
+    "secondaryLabels": [
+      "My messages"
+    ]
+  },
+  "C02": {
+    "title": "What would you like help with?",
+    "helper": "You do not need to know what to call it.",
+    "choices": [
+      "Something happened to me",
+      "Something online worries me",
+      "I am worried about someone",
+      "I am not sure"
+    ],
+    "primary": "Next",
+    "secondaryLabels": [
+      "Ask for a different team"
+    ]
+  },
+  "C03": {
+    "title": "What would you like us to know?",
+    "helper": "Share as much or as little as you want.",
+    "choices": [
+      "Type a message",
+      "Record my voice",
+      "Just ask for help"
+    ],
+    "primary": "Next",
+    "secondaryLabels": [
+      "Back"
+    ]
+  },
+  "C04": {
+    "title": "Would you like messages here?",
+    "helper": "We will not send notifications about this conversation.",
+    "choices": [
+      "Yes, when I come back",
+      "Send this without replies"
+    ],
+    "primary": "Next",
+    "secondaryLabels": [
+      "Back"
+    ]
+  },
+  "C05": {
+    "title": "Check what you are sending",
+    "helper": "This goes to {operatorName}.",
+    "choices": [
+      "Your choices — Change",
+      "Your message — Change",
+      "Your reply choice — Change"
+    ],
+    "primary": "Send to the support team",
+    "secondaryLabels": [
+      "Back"
+    ]
+  },
+  "C06": {
+    "title": "Your message was received.",
+    "helper": "It was saved for the team. They may not have read it yet.",
+    "choices": [
+      "You choose how to come back",
+      "You can also leave now"
+    ],
+    "primary": "Choose how to come back",
+    "secondaryLabels": [
+      "Leave this page"
+    ]
+  },
+  "C07": {
+    "title": "Choose how to come back",
+    "helper": "Only save access on a device that is safe for you.",
+    "choices": [
+      "Use this device again",
+      "Use a return card",
+      "Continue without saving access"
+    ],
+    "primary": "Continue",
+    "secondaryLabels": [
+      "Not now"
+    ]
+  },
+  "C08": {
+    "title": "Open your messages",
+    "helper": "Your words work with the key saved on this device.",
+    "choices": [
+      "First word",
+      "Second word",
+      "Third word"
+    ],
+    "primary": "Open my messages",
+    "secondaryLabels": [
+      "Use my return card"
+    ]
+  },
+  "C09": {
+    "title": "Your messages",
+    "helper": "You can send a message now. A support worker may reply later.",
+    "choices": [
+      "Message history",
+      "Type a message",
+      "Record my voice"
+    ],
+    "primary": "Send message",
+    "secondaryLabels": [
+      "My reply choice"
+    ]
+  },
+  "C10": {
+    "title": "Would you like a different team?",
+    "helper": "You can ask for help from someone outside this place.",
+    "choices": [
+      "Yes",
+      "No",
+      "I am not sure",
+      "Skip"
+    ],
+    "primary": "Continue",
+    "secondaryLabels": [
+      "Back"
+    ]
+  },
+  "C11": {
+    "title": "Other ways to get help",
+    "helper": "Calling may appear in your phone’s call history.",
+    "choices": [
+      "Call 1098 for child support",
+      "Call 112 for immediate danger"
+    ],
+    "primary": "Back to my message",
+    "secondaryLabels": [
+      "Leave this page"
+    ]
+  },
+  "C12": {
+    "title": "You choose what to share",
+    "helper": "You do not need to give your name.",
+    "choices": [
+      "Who can read or hear it",
+      "What stays on this device",
+      "How to leave and come back"
+    ],
+    "primary": "Back",
+    "secondaryLabels": [
+      "Listen"
+    ]
+  },
+  "M01": {
+    "title": "Who are you worried about?",
+    "helper": "Tell us what you know. It is okay to be unsure.",
+    "choices": [
+      "A child is missing",
+      "I saw a child who may need help",
+      "I am lost"
+    ],
+    "primary": "Next",
+    "secondaryLabels": [
+      "Back"
+    ]
+  },
+  "M02": {
+    "title": "What do you know?",
+    "helper": "A short message is enough to start.",
+    "choices": [
+      "Type a message",
+      "Record my voice",
+      "Help me explain"
+    ],
+    "primary": "Next",
+    "secondaryLabels": [
+      "Back"
+    ]
+  },
+  "M03": {
+    "title": "Where were they last seen?",
+    "helper": "Your phone may be somewhere different.",
+    "choices": [
+      "Choose a place",
+      "Use my location once",
+      "I do not know"
+    ],
+    "primary": "Next",
+    "secondaryLabels": [
+      "Back"
+    ]
+  },
+  "M04": {
+    "title": "Check what you are sending",
+    "helper": "The team reviews this before sharing an alert.",
+    "choices": [
+      "Your message — Change",
+      "Place and time — Change",
+      "Receiving team"
+    ],
+    "primary": "Send privately",
+    "secondaryLabels": [
+      "Back"
+    ]
+  },
+  "M05": {
+    "title": "Your message was received.",
+    "helper": "This has not automatically created a public alert.",
+    "choices": [
+      "Choose how to come back",
+      "Other ways to get help"
+    ],
+    "primary": "Choose how to come back",
+    "secondaryLabels": [
+      "Other ways to get help"
+    ]
+  },
+  "A01": {
+    "title": "Nearby missing-child alerts",
+    "helper": "Choose an area to read current alerts.",
+    "choices": [
+      "Search area",
+      "Use my location once",
+      "Current alerts"
+    ],
+    "primary": "Choose an area",
+    "secondaryLabels": [
+      "Get alerts for my area"
+    ]
+  },
+  "A02": {
+    "title": "Read this alert",
+    "helper": "Use the latest details shown here.",
+    "choices": [
+      "Reviewed details",
+      "Area and last seen time",
+      "Issuer and last updated time"
+    ],
+    "primary": "I saw something",
+    "secondaryLabels": [
+      "Share this link"
+    ]
+  },
+  "A03": {
+    "title": "What did you see?",
+    "helper": "Do not follow or confront anyone.",
+    "choices": [
+      "Type or record what you saw",
+      "Approximate place and time — optional"
+    ],
+    "primary": "Send privately",
+    "secondaryLabels": [
+      "Back"
+    ]
+  },
+  "A04": {
+    "title": "Your message was received.",
+    "helper": "The reviewing team may not have read it yet.",
+    "choices": [
+      "Receipt saved by server"
+    ],
+    "primary": "Back to the alert",
+    "secondaryLabels": [
+      "Share another observation"
+    ]
+  },
+  "A05": {
+    "title": "Get alerts for this area",
+    "helper": "Public alerts may appear on your lock screen.",
+    "choices": [
+      "Choose an area",
+      "Confirm notification consent",
+      "Device support guidance when needed"
+    ],
+    "primary": "Allow notifications",
+    "secondaryLabels": [
+      "Not now"
+    ]
+  },
+  "A06": {
+    "title": "Your alert settings",
+    "helper": "These settings only affect this browser.",
+    "choices": [
+      "Saved area",
+      "Permission state",
+      "Change area"
+    ],
+    "primary": "Stop notifications",
+    "secondaryLabels": [
+      "Back to alerts"
+    ]
+  },
+  "S01": {
+    "title": "Staff sign in",
+    "helper": "Use your own staff account.",
+    "choices": [
+      "Username or organization sign-in",
+      "Password when session auth is deployed",
+      "Show password"
+    ],
+    "primary": "Sign in",
+    "secondaryLabels": [
+      "Back to Bal Setu"
+    ]
+  },
+  "S02": {
+    "title": "My work",
+    "helper": "Open a request to see what needs attention.",
+    "choices": [
+      "New",
+      "Waiting for me",
+      "Waiting for child",
+      "Escalated",
+      "Authorized queue"
+    ],
+    "primary": "Open request",
+    "secondaryLabels": [
+      "Alert review"
+    ]
+  },
+  "S03": {
+    "title": "Request details",
+    "helper": "Read or listen before responding.",
+    "choices": [
+      "Original message",
+      "Reply permission",
+      "Team and assignment",
+      "Actual timeline"
+    ],
+    "primary": "Open conversation",
+    "secondaryLabels": [
+      "Assign",
+      "Accept"
+    ]
+  },
+  "S04": {
+    "title": "Choose a responder",
+    "helper": "Choose someone who can take responsibility.",
+    "choices": [
+      "Eligible active responders"
+    ],
+    "primary": "Assign request",
+    "secondaryLabels": [
+      "Cancel"
+    ]
+  },
+  "S05": {
+    "title": "Accept this request",
+    "helper": "Your acceptance tells the team you are taking responsibility.",
+    "choices": [
+      "Case and assignment summary"
+    ],
+    "primary": "Accept request",
+    "secondaryLabels": [
+      "Back"
+    ]
+  },
+  "S06": {
+    "title": "Conversation",
+    "helper": "Sound may be heard by people nearby.",
+    "choices": [
+      "Actual message history",
+      "Reply to child / Private team note",
+      "Type or record",
+      "Text equivalent for a voice reply"
+    ],
+    "primary": "Send reply",
+    "secondaryLabels": [
+      "Transfer or escalate"
+    ]
+  },
+  "S07": {
+    "title": "Ask another team for help",
+    "helper": "Keep responsibility until the receiving team accepts.",
+    "choices": [
+      "Authorized receiving team",
+      "Reason",
+      "Minimum necessary summary"
+    ],
+    "primary": "Request transfer",
+    "secondaryLabels": [
+      "Cancel"
+    ]
+  },
+  "S08": {
+    "title": "Close this request",
+    "helper": "Closing a request does not mean the child is no longer at risk.",
+    "choices": [
+      "Reason",
+      "Child-visible message if allowed",
+      "Remaining support options"
+    ],
+    "primary": "Close request",
+    "secondaryLabels": [
+      "Cancel"
+    ]
+  },
+  "S09": {
+    "title": "Private sightings",
+    "helper": "These observations are not public.",
+    "choices": [
+      "Authorized tips",
+      "Listen on tap",
+      "Follow-up status"
+    ],
+    "primary": "Mark reviewed",
+    "secondaryLabels": [
+      "Back to alert"
+    ]
+  },
+  "S10": {
+    "title": "Prepare a public alert",
+    "helper": "Only approved details will be shared.",
+    "choices": [
+      "Case selection",
+      "Minimum public description",
+      "Reviewed area",
+      "Expiry",
+      "Verification basis",
+      "Public preview"
+    ],
+    "primary": "Send for review",
+    "secondaryLabels": [
+      "Save draft"
+    ]
+  },
+  "S11": {
+    "title": "Review this alert",
+    "helper": "Check the exact information people will see.",
+    "choices": [
+      "Public preview",
+      "Private verification basis",
+      "Area and expiry",
+      "Publication risks"
+    ],
+    "primary": "Approve this revision",
+    "secondaryLabels": [
+      "Reject with reason"
+    ]
+  },
+  "S12": {
+    "title": "Manage this alert",
+    "helper": "Publication and notification delivery are different states.",
+    "choices": [
+      "Approved preview",
+      "Audience estimate",
+      "Delivery state",
+      "Expiry"
+    ],
+    "primary": "Publish alert",
+    "secondaryLabels": [
+      "Withdraw / Resolve"
+    ]
+  },
+  "S13": {
+    "title": "Service settings",
+    "helper": "Only display coverage the team can actually provide.",
+    "choices": [
+      "Operator details",
+      "Intake availability",
+      "Independent routing",
+      "Reviewed languages",
+      "Feature states"
+    ],
+    "primary": "Save settings",
+    "secondaryLabels": [
+      "Cancel"
+    ]
+  },
+  "S14": {
+    "title": "Staff and area access",
+    "helper": "Keep access limited to current responsibilities.",
+    "choices": [
+      "Active people and roles",
+      "Organizations",
+      "Reviewed areas",
+      "Entry points"
+    ],
+    "primary": "Save changes",
+    "secondaryLabels": [
+      "Cancel"
+    ]
+  },
+  "S15": {
+    "title": "End staff access",
+    "helper": "Signing out ends access on this browser.",
+    "choices": [
+      "Unsaved work warning if relevant"
+    ],
+    "primary": "Sign out",
+    "secondaryLabels": [
+      "Cancel"
+    ]
+  }
+}

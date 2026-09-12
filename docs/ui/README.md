@@ -2,6 +2,8 @@
 
 Version 1 · 13 September 2026 · Status: implementation specification, not a release report.
 
+**New: self-contained visual/build resources.** Start a less capable implementing AI with [implementation-kit/START-HERE.md](implementation-kit/START-HERE.md). The kit includes generated raster masters, 36 editable SVG icons, CSS, React primitives, 38 screen recipes, seven composition boards, English copy and small ordered tasks. [Open the visual gallery](implementation-kit/gallery.html). These resources have not been integrated into the live app.
+
 ## Product intent
 
 A child can ask for help without knowing what happened to them is called, writing a long account, giving their name, or creating an account. They can choose a few clear options, type, or record their voice. They remain in control of what is sent and what makes sound. A responsible human team receives the request and can continue the conversation. Nearby adults can separately choose to receive reviewed missing-child alerts.
