@@ -12,6 +12,8 @@ interface CaseRow {
   conflict_flag: string | null;
   created_at: string;
   organization_id?: string;
+ account_text?:string;
+ safe_contact_preference?: {preferred_channel:string;safe_hours_start:string;safe_hours_end:string;time_zone:string};
 }
 
 const getCaseId = (c: CaseRow | null | undefined): string => c?.case_id || c?.id || '';
@@ -23,6 +25,7 @@ interface Assignment {
   responder_id: string | null;
   status: string;
   accepted_at: string | null;
+ unassigned_at?: string|null;
   assigned_at: string;
 }
 
@@ -69,6 +72,9 @@ function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [isStaffNote, setIsStaffNote] = useState(false);
+ const [responders,setResponders]=useState<Array<{id:string;name:string}>>([]);
+ const [chosenResponder,setChosenResponder]=useState('');
+ useEffect(()=>{if(staff && ['supervisor','admin'].includes(staff.role)) fetch(`${API_BASE}/staff/assignments/responders`,{headers:{Authorization:`Bearer ${staff.token}`}}).then(async r=>{const d=await r.json();if(!r.ok)throw new Error(d.error || 'Could not load responders');setResponders(d.responders)}).catch(e=>setErrorMsg(e.message))},[staff]);
 
 
   const authHeaders = useCallback(() => ({
@@ -144,12 +150,16 @@ function App() {
     setErrorMsg(null);
     setLoading(true);
     try {
-      const [aRes, mRes] = await Promise.all([
+      const [aRes, mRes, cRes] = await Promise.all([
         fetch(`${API_BASE}/staff/assignments?case_id=${cid}`, { headers: authHeaders() }),
         fetch(`${API_BASE}/staff/messages?case_id=${cid}`, { headers: authHeaders() }),
+        fetch(`${API_BASE}/staff/cases/${cid}`, { headers: authHeaders() }),
       ]);
       const aData = await aRes.json();
       const mData = await mRes.json();
+      const cData=await cRes.json();
+      if(!cRes.ok || !mRes.ok || !aRes.ok) throw new Error(cData.error || mData.error || aData.error || 'Unable to open report');
+      setSelectedCase(cData);
       setAssignments(aData.assignments || []);
       setMessages(mData.messages || []);
       setScreen('case_detail');
@@ -242,7 +252,7 @@ function App() {
           <span className="ops-brand-icon">🛡️</span>
           <span className="ops-brand-name">Bal Suraksha <span className="ops-badge-ops">Staff</span></span>
         </div>
-        <nav className="ops-workspaces" aria-label="Other spaces"><a href={import.meta.env.VITE_PUBLIC_URL ?? 'http://localhost:5173'}>Public home</a><a href={`${import.meta.env.VITE_PUBLIC_URL ?? 'http://localhost:5173'}/alerts`}>Local alerts</a></nav>
+        <nav className="ops-workspaces" aria-label="Other spaces"><a href={import.meta.env.VITE_PUBLIC_URL ?? 'http://localhost:5173'}>Public home</a><a href={`${(import.meta.env.VITE_PUBLIC_URL ?? 'http://localhost:5173').replace(/\/$/, '')}/alerts`}>Local alerts</a></nav>
         {staff && (
           <nav className="ops-nav">
             <button className={`ops-nav-btn${screen === 'cases' || screen === 'case_detail' ? ' active' : ''}`}
@@ -342,6 +352,9 @@ function App() {
                 </span>
               </div>
 
+              <section className="ops-section"><h3 className="ops-section-title">Report</h3><p style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{selectedCase.account_text}</p></section>
+              <aside className="ops-help"><strong>Contact choice</strong><p>{selectedCase.safe_contact_preference?.preferred_channel==='message_in_app' ? `In-app replies only · ${selectedCase.safe_contact_preference.safe_hours_start}–${selectedCase.safe_contact_preference.safe_hours_end} (${selectedCase.safe_contact_preference.time_zone}). Equal start/end means any time.` : 'No contact. You may add internal staff notes only.'}</p></aside>
+              {staff && ['supervisor','admin'].includes(staff.role) && <form className="ops-help" onSubmit={async e=>{e.preventDefault();setLoading(true);setErrorMsg(null);try{const r=await fetch(`${API_BASE}/staff/assignments`,{method:'POST',headers:authHeaders(),body:JSON.stringify({case_id:getCaseId(selectedCase),responder_id:chosenResponder})});const d=await r.json();if(!r.ok)throw new Error(d.error || 'Assignment failed');await openCase(selectedCase)}catch(e){setErrorMsg((e as Error).message)}finally{setLoading(false)}}}><label htmlFor="choose-responder" className="ops-label">Assign a responder</label><select id="choose-responder" className="ops-input" value={chosenResponder} onChange={e=>setChosenResponder(e.target.value)} required><option value="">Choose an active responder</option>{responders.map(r=><option key={r.id} value={r.id}>{r.name}</option>)}</select><p>Reassigning closes the current assignment. The new responder must accept it.</p><button className="ops-btn-primary" disabled={loading || !chosenResponder}>Save assignment</button></form>}
               {/* Assignments */}
               <section className="ops-section">
                 <h3 className="ops-section-title">Assignment</h3>
@@ -350,12 +363,12 @@ function App() {
                 ) : assignments.map(a => (
                   <div key={a.id} className="ops-assignment-row" id={`assignment-${a.id}`}>
                     <div>
-                      <span className="ops-badge">{a.status}</span>
+                      <span className="ops-badge">{a.unassigned_at ? 'Reassigned' : a.accepted_at ? 'Accepted' : 'Awaiting acceptance'}</span>
                       <span className="ops-muted" style={{ marginLeft: 8 }}>
                         Assigned {new Date(a.assigned_at).toLocaleString()}
                       </span>
                     </div>
-                    {!a.accepted_at && (
+                    {!a.accepted_at && !a.unassigned_at && a.responder_id === staff?.staffId && (
                       <button className="ops-btn-primary ops-btn-sm" id={`accept-${a.id}`}
                         onClick={() => handleAccept(a.id)} disabled={loading}>
                         ✓ Explicitly Accept Case
@@ -398,7 +411,7 @@ function App() {
                       <span>Private staff note (not visible to reporter)</span>
                     </label>
                     <button id="send-message" className="ops-btn-primary ops-btn-sm"
-                      onClick={handleSendMessage} disabled={loading || !newMessage.trim()}>
+                      onClick={handleSendMessage} disabled={loading || !newMessage.trim() || (!isStaffNote && selectedCase.safe_contact_preference?.preferred_channel !== 'message_in_app')}>
                       {loading ? '…' : isStaffNote ? '🔒 Save Note' : '📨 Send to Reporter'}
                     </button>
                   </div>

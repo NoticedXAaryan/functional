@@ -1,0 +1,24 @@
+{$PUBLIC_HOST} {
+  encode gzip
+  header {
+    Referrer-Policy "no-referrer"
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "DENY"
+    Cache-Control "no-store"
+    Permissions-Policy "camera=(), microphone=(), geolocation=()"
+  }
+  handle /api/* {
+    reverse_proxy api:8080
+  }
+  redir /staff /staff/ 308
+  handle_path /staff/* {
+    root * /srv/staff
+    try_files {path} /index.html
+    file_server
+  }
+  handle {
+    root * /srv/public
+    try_files {path} /index.html
+    file_server
+  }
+}

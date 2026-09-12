@@ -1,0 +1,11 @@
+.git
+.env
+.env.local
+.env.*.local
+**/node_modules
+**/dist
+tmp
+artifacts
+**/*.exe
+**/*.pem
+**/*.key

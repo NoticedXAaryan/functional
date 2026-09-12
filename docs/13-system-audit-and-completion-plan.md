@@ -1,6 +1,8 @@
 # System audit and completion plan
 Updated 12 September 2026.
 
+> Subsequent beta engineering work is documented in [14 — Beta handoff](14-beta-handoff.md). Return access, contact preferences, assignment UI, tip review and submission idempotency below describe the earlier audit; read 14 for changes and the explicit no-testing verification limits.
+
 ## Assessment
 The repository now contains a working synthetic alert vertical slice. It is not a complete child-safety service. A polished screen, an HTTP success response and a push-provider acceptance each prove different things; none proves that a child received human help.
 

@@ -52,6 +52,7 @@ func (h *Handler) Routes() http.Handler {
 	// GET  /assignments/referrals?case_id=<uuid>      — list referrals for a case
 
 	r.Get("/", h.HandleList)
+	r.Get("/responders", h.HandleResponders)
 	r.Post("/", h.HandleCreate)
 	r.Post("/{assignmentID}/accept", h.HandleAccept)
 	r.Post("/{assignmentID}/unassign", h.HandleUnassign)
@@ -97,15 +98,15 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	type assignmentRow struct {
-		ID               string     `json:"id"`
-		CaseID           string     `json:"case_id"`
-		ResponderID      string     `json:"responder_id"`
-		AssignedBy       string     `json:"assigned_by"`
-		AssignedAt       time.Time  `json:"assigned_at"`
-		AcceptedAt       *time.Time `json:"accepted_at,omitempty"`
-		EscalationDueAt  *time.Time `json:"escalation_due_at,omitempty"`
-		UnassignedAt     *time.Time `json:"unassigned_at,omitempty"`
-		Version          int        `json:"version"`
+		ID              string     `json:"id"`
+		CaseID          string     `json:"case_id"`
+		ResponderID     string     `json:"responder_id"`
+		AssignedBy      string     `json:"assigned_by"`
+		AssignedAt      time.Time  `json:"assigned_at"`
+		AcceptedAt      *time.Time `json:"accepted_at,omitempty"`
+		EscalationDueAt *time.Time `json:"escalation_due_at,omitempty"`
+		UnassignedAt    *time.Time `json:"unassigned_at,omitempty"`
+		Version         int        `json:"version"`
 	}
 
 	var assignments []assignmentRow
@@ -180,7 +181,7 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	// Verify responder belongs to the same organization and is active
 	var responderOrgID string
 	err := h.pool.QueryRow(r.Context(), `
-		SELECT organization_id FROM staff_members WHERE id = $1 AND active = TRUE
+		SELECT sm.organization_id FROM staff_members sm WHERE sm.id=$1 AND sm.active AND EXISTS(SELECT 1 FROM role_grants sr WHERE sr.staff_id=sm.id AND sr.organization_id=sm.organization_id AND sr.revoked_at IS NULL AND sr.role='responder')
 	`, req.ResponderID).Scan(&responderOrgID)
 	if err == pgx.ErrNoRows {
 		writeError(w, http.StatusBadRequest, "responder_not_found",
@@ -212,6 +213,11 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback(r.Context()) //nolint:errcheck
 
+	var currentStatus string
+	if err = tx.QueryRow(r.Context(), `SELECT status FROM cases WHERE id=$1 AND organization_id=$2 FOR UPDATE`, req.CaseID, claims.OrganizationID).Scan(&currentStatus); err != nil || currentStatus == "CLOSED" {
+		writeError(w, 409, "case_unavailable", "Cannot assign this report")
+		return
+	}
 	// Close any existing active assignment for this case
 	_, err = tx.Exec(r.Context(), `
 		UPDATE assignments
@@ -246,8 +252,8 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 
 	_, _ = tx.Exec(r.Context(), `
 		INSERT INTO case_events (case_id, from_status, to_status, actor_type, actor_id, case_version)
-		VALUES ($1, 'TRIAGE', 'ASSIGNED', 'staff', $2, (SELECT version FROM cases WHERE id = $1))
-	`, req.CaseID, claims.StaffID)
+		VALUES ($1, $3::case_status, 'ASSIGNED', 'staff', $2, (SELECT version FROM cases WHERE id = $1))
+	`, req.CaseID, claims.StaffID, currentStatus)
 
 	if err := tx.Commit(r.Context()); err != nil {
 		log.Error().Err(err).Msg("failed to commit assignment transaction")
@@ -263,9 +269,9 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 		Msg("case assigned")
 
 	writeJSON(w, http.StatusCreated, map[string]interface{}{
-		"assignment_id":    assignmentID.String(),
-		"case_id":          req.CaseID,
-		"responder_id":     req.ResponderID,
+		"assignment_id":     assignmentID.String(),
+		"case_id":           req.CaseID,
+		"responder_id":      req.ResponderID,
 		"escalation_due_at": escalationDue,
 		// Explicit reminder: assignment is not acceptance
 		"note": "Assignment does not imply acceptance. The responder must explicitly accept.",
@@ -332,11 +338,22 @@ func (h *Handler) HandleAccept(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	tx, err := h.pool.Begin(r.Context())
+	if err != nil {
+		writeError(w, 503, "unavailable", "Try again")
+		return
+	}
+	defer tx.Rollback(r.Context())
+	var currentStatus string
+	if err = tx.QueryRow(r.Context(), `SELECT status FROM cases WHERE id=$1 AND organization_id=$2 FOR UPDATE`, caseID, claims.OrganizationID).Scan(&currentStatus); err != nil || currentStatus != "ASSIGNED" {
+		writeError(w, 409, "case_changed", "Refresh this report before accepting")
+		return
+	}
 	now := time.Now()
 
 	// Optimistic lock: only update if version hasn't changed since we read it.
 	// This prevents a race where two acceptance attempts land simultaneously.
-	tag, err := h.pool.Exec(r.Context(), `
+	tag, err := tx.Exec(r.Context(), `
 		UPDATE assignments
 		SET accepted_at = $1, version = version + 1
 		WHERE id = $2 AND version = $3 AND accepted_at IS NULL AND unassigned_at IS NULL
@@ -354,7 +371,7 @@ func (h *Handler) HandleAccept(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Advance case status to ACCEPTED
-	_, _ = h.pool.Exec(r.Context(), `
+	_, err = tx.Exec(r.Context(), `
 		UPDATE cases SET status = 'ACCEPTED', updated_at = NOW(), version = version + 1
 		WHERE id = $1 AND status = 'ASSIGNED'
 	`, caseID)
@@ -364,6 +381,14 @@ func (h *Handler) HandleAccept(w http.ResponseWriter, r *http.Request) {
 		VALUES ($1, 'ASSIGNED', 'ACCEPTED', 'staff', $2, (SELECT version FROM cases WHERE id = $1))
 	`, caseID, claims.StaffID)
 
+	if err != nil {
+		writeError(w, 503, "unavailable", "Acceptance not confirmed; retry")
+		return
+	}
+	if tx.Commit(r.Context()) != nil {
+		writeError(w, 503, "unavailable", "Acceptance not confirmed; retry")
+		return
+	}
 	log.Info().
 		Str("assignment_id", assignmentIDStr).
 		Str("case_id", caseID).
@@ -514,10 +539,10 @@ func (h *Handler) HandleCreateReferral(w http.ResponseWriter, r *http.Request) {
 		Msg("referral created")
 
 	writeJSON(w, http.StatusCreated, map[string]interface{}{
-		"referral_id":      referralID.String(),
-		"case_id":          req.CaseID,
-		"to_organization":  req.ToOrganization,
-		"acknowledged_at":  nil,
+		"referral_id":     referralID.String(),
+		"case_id":         req.CaseID,
+		"to_organization": req.ToOrganization,
+		"acknowledged_at": nil,
 		// Explicit reminder: referral is not complete until acknowledged
 		"note": "Referral is not a completed handoff until explicitly acknowledged by the receiving organization.",
 	})

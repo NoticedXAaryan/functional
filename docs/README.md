@@ -4,6 +4,7 @@ Start with the [application user guide](../README.md) to run the app and underst
 
 | Document | Purpose |
 | --- | --- |
+| [14 Current beta handoff](14-beta-handoff.md) | Latest engineering changes, real deployment setup and remaining operating requirements |
 | [01 Product requirements](01-product-requirements.md) | Intended behavior and acceptance requirements |
 | [02 Experience and content](02-experience-and-content.md) | Navigation, copy, states and accessibility |
 | [03 Architecture](03-architecture.md) | System components and reliability boundaries |

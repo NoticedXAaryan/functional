@@ -74,16 +74,17 @@ func RequireSessionToken(cfg *config.Config, pool ...*db.Pool) func(http.Handler
 			if dbPool != nil && claims.SessionID != "" {
 				var revokedAt *time.Time
 				var expiresAt time.Time
+				var tokenJTI string
 				err := dbPool.QueryRow(r.Context(),
-					`SELECT revoked_at, expires_at FROM private_sessions WHERE id = $1`,
+					`SELECT revoked_at, expires_at, token_jti FROM private_sessions WHERE id = $1`,
 					claims.SessionID,
-				).Scan(&revokedAt, &expiresAt)
+				).Scan(&revokedAt, &expiresAt, &tokenJTI)
 				if err != nil {
 					log.Warn().Err(err).Str("session_id", claims.SessionID).Msg("session revocation check failed")
 					writeError(w, http.StatusUnauthorized, "session_lookup_failed", "Could not verify session")
 					return
 				}
-				if revokedAt != nil {
+				if revokedAt != nil || claims.ID != tokenJTI {
 					writeError(w, http.StatusUnauthorized, "session_revoked", "Session has been ended")
 					return
 				}

@@ -113,7 +113,7 @@ components:
     # ── Sessions ──────────────────────────────────────────────────────────
     SessionCreateRequest:
       type: object
-      required: [entry_point_id, mode]
+      required: [mode]
       properties:
         entry_point_id:
           type: string
@@ -125,6 +125,9 @@ components:
           type: string
           default: en
 
+        invitation_code:
+          type: string
+          description: Required for invited beta intake.
     SessionCreateResponse:
       type: object
       required: [session_token, expires_at]
@@ -135,26 +138,23 @@ components:
         expires_at:
           type: string
           format: date-time
-        return_secret_words:
-          type: array
-          items:
-            type: string
-          description: |
-            BIP-39 mnemonic words (4 words). Only present if mode=with_return_access.
-            Display clearly. Store only the hashed verifier server-side.
-            NEVER returned again after initial creation.
-          nullable: true
+        session_id:
+          type: string
+          format: uuid
+        return_code:
+          type: string
+          description: Random 256-bit hexadecimal capability, shown only at session creation. Save privately.
+        return_expires_at:
+          type: string
+          format: date-time
 
     SessionAccessRequest:
       type: object
-      required: [words]
+      required: [return_code]
       properties:
-        words:
-          type: array
-          items:
-            type: string
-          minItems: 4
-          maxItems: 4
+        return_code:
+          type: string
+          description: 64 hexadecimal characters. Display separators and whitespace are accepted. Legacy words are not accepted.
 
     SessionAccessResponse:
       type: object
@@ -240,6 +240,10 @@ components:
     SafeContactPreference:
       type: object
       properties:
+        time_zone:
+          type: string
+          enum: [Asia/Kolkata, UTC]
+          default: Asia/Kolkata
         safe_hours_start:
           type: string
           nullable: true

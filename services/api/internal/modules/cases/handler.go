@@ -6,8 +6,11 @@
 package cases
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -65,10 +68,10 @@ func (h *SessionHandler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		AccountText           string      `json:"account_text"`
-		RouteType             string      `json:"route_type"`
-		ConflictFlag          *string     `json:"conflict_flag"`
-		SafeContactPreference interface{} `json:"safe_contact_preference"`
+		AccountText           string            `json:"account_text"`
+		RouteType             string            `json:"route_type"`
+		ConflictFlag          *string           `json:"conflict_flag"`
+		SafeContactPreference ContactPreference `json:"safe_contact_preference"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", "Invalid JSON body")
@@ -85,71 +88,112 @@ func (h *SessionHandler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get the session to find the organization (via entry point)
-	var orgID string
-	err = h.pool.QueryRow(r.Context(), `
-		SELECT ep.organization_id
-		FROM private_sessions ps
-		JOIN entry_points ep ON ep.id = ps.entry_point_id
-		WHERE ps.id = $1 AND ps.revoked_at IS NULL AND ps.expires_at > NOW()
-	`, claims.SessionID).Scan(&orgID)
-	if err != nil {
-		if h.cfg.AppMode != config.AppModeDemo || err != pgx.ErrNoRows {
-			writeError(w, http.StatusServiceUnavailable, "route_unavailable", "A verified support route is required before submitting")
+	if req.ConflictFlag != nil && *req.ConflictFlag != "" {
+		if *req.ConflictFlag != "school_implicated" && *req.ConflictFlag != "caregiver_implicated" && *req.ConflictFlag != "staff_implicated" {
+			writeError(w, 400, "invalid_conflict", "Choose a listed conflict option")
 			return
 		}
-		// Only synthetic demos may use the fictional default organization.
+	} else {
+		req.ConflictFlag = nil
+	}
+	if strings.TrimSpace(req.AccountText) == "" || len(req.AccountText) > 16000 {
+		writeError(w, 400, "invalid_text", "Describe what happened in 16,000 bytes or fewer")
+		return
+	}
+	if err := req.SafeContactPreference.Validate(); err != nil {
+		writeError(w, 400, "invalid_contact", err.Error())
+		return
+	}
+	encoded, _ := json.Marshal(req)
+	sum := sha256.Sum256(encoded)
+	requestDigest := hex.EncodeToString(sum[:])
+	tx, err := h.pool.Begin(r.Context())
+	if err != nil {
+		writeError(w, 503, "db_error", "Try again")
+		return
+	}
+	defer tx.Rollback(r.Context())
+	var existing *string
+	var entryPoint *string
+	err = tx.QueryRow(r.Context(), `SELECT case_id,entry_point_id FROM private_sessions WHERE id=$1 AND token_jti=$2 AND revoked_at IS NULL AND expires_at>NOW() FOR UPDATE`, claims.SessionID, claims.ID).Scan(&existing, &entryPoint)
+	if err != nil {
+		writeError(w, 401, "session_expired", "Open a new session")
+		return
+	}
+	if existing != nil {
+		var receiptID, status, key string
+		var created time.Time
+		var digest *string
+		if err = tx.QueryRow(r.Context(), `SELECT receipt_id,status,idempotency_key,created_at,submission_digest FROM cases WHERE id=$1`, *existing).Scan(&receiptID, &status, &key, &created, &digest); err != nil {
+			writeError(w, 503, "db_error", "Try again")
+			return
+		}
+		if key != idempotencyKey.String() || digest == nil || *digest != requestDigest {
+			writeError(w, 409, "already_submitted", "This session already submitted a report. Keep its receipt; start a new session for a different report.")
+			return
+		}
+		writeJSON(w, 200, map[string]interface{}{"case_id": *existing, "receipt_id": receiptID, "status": status, "received_at": created})
+		return
+	}
+	// Serialize global idempotency keys without exposing a different session's receipt.
+	if _, err = tx.Exec(r.Context(), `SELECT pg_advisory_xact_lock(hashtextextended($1,31))`, idempotencyKey.String()); err != nil {
+		writeError(w, 503, "db_error", "Try again")
+		return
+	}
+	var keyUsed bool
+	if err = tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM cases WHERE idempotency_key=$1)`, idempotencyKey).Scan(&keyUsed); err != nil {
+		writeError(w, 503, "db_error", "Try again")
+		return
+	}
+	if keyUsed {
+		writeError(w, 409, "key_used", "Use a new submission key")
+		return
+	}
+	var orgID string
+	var independent *string
+	if entryPoint != nil {
+		err = tx.QueryRow(r.Context(), `SELECT ep.organization_id,ep.independent_organization_id FROM entry_points ep JOIN organizations o ON o.id=ep.organization_id WHERE ep.id=$1 AND ep.active AND ep.revoked_at IS NULL AND o.active`, *entryPoint).Scan(&orgID, &independent)
+		if err != nil {
+			writeError(w, 503, "route_unavailable", "This support route is unavailable")
+			return
+		}
+	} else if h.cfg.AppMode == config.AppModeDemo {
 		orgID = "00000000-0000-0000-0000-000000000001"
-	}
-
-	// Check for existing case with this idempotency key (idempotent retry)
-	var existingCaseID, existingReceiptID, existingStatus string
-	var existingCreatedAt time.Time
-	err = h.pool.QueryRow(r.Context(), `
-		SELECT c.id, c.receipt_id, c.status, c.created_at FROM cases c
-		JOIN private_sessions ps ON ps.case_id = c.id
-		WHERE c.idempotency_key = $1 AND ps.id = $2
-	`, idempotencyKey, claims.SessionID).Scan(&existingCaseID, &existingReceiptID, &existingStatus, &existingCreatedAt)
-	if err == nil {
-		// Idempotent: return the existing receipt
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"case_id":     existingCaseID,
-			"receipt_id":  existingReceiptID,
-			"status":      existingStatus,
-			"received_at": existingCreatedAt,
-		})
+	} else {
+		writeError(w, 503, "route_unavailable", "A support organization is required")
 		return
 	}
-	if err != pgx.ErrNoRows {
-		log.Error().Err(err).Msg("error checking idempotency key")
-		writeError(w, http.StatusInternalServerError, "db_error", "Database error")
+	if req.ConflictFlag != nil && independent != nil && *independent != orgID {
+		orgID = *independent
+	} else if req.ConflictFlag != nil && h.cfg.AppMode != config.AppModeDemo {
+		writeError(w, 503, "independent_route_unavailable", "An independent support route is not available here. Your report has not been sent.")
 		return
 	}
-
-	// Create case in a transaction — receipt only issued after commit
+	if h.cfg.AppMode != config.AppModeDemo {
+		var ready bool
+		err = tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM organizations o JOIN staff_members sm ON sm.organization_id=o.id JOIN role_grants sr ON sr.staff_id=sm.id AND sr.organization_id=o.id WHERE o.id=$1 AND o.active AND sm.active AND sr.revoked_at IS NULL AND sr.role IN ('supervisor','admin'))`, orgID).Scan(&ready)
+		if err != nil || !ready {
+			writeError(w, 503, "route_unavailable", "This organization is not accepting reports")
+			return
+		}
+	}
 	caseID := uuid.New()
 	receiptID := uuid.New()
 	now := time.Now()
-
-	tx, err := h.pool.Begin(r.Context())
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "db_error", "Could not start transaction")
-		return
-	}
-	defer tx.Rollback(r.Context()) //nolint:errcheck
-
 	_, err = tx.Exec(r.Context(), `
-		INSERT INTO cases (id, organization_id, idempotency_key, status, route_type, account_text, conflict_flag, receipt_id)
-		VALUES ($1, $2, $3, 'RECEIVED', $4, $5, $6, $7)
-	`, caseID, orgID, idempotencyKey, req.RouteType, req.AccountText, req.ConflictFlag, receiptID)
+		INSERT INTO cases (id, organization_id, idempotency_key, status, route_type, account_text, conflict_flag, receipt_id, submission_digest, entry_point_id)
+		VALUES ($1, $2, $3, 'RECEIVED', $4, $5, $6, $7, $8, $9)
+	`, caseID, orgID, idempotencyKey, req.RouteType, req.AccountText, req.ConflictFlag, receiptID, requestDigest, entryPoint)
 	if err != nil {
 		log.Error().Err(err).Msg("failed to insert case")
 		writeError(w, http.StatusInternalServerError, "db_error", "Could not create case")
 		return
 	}
 
+	if _, err = tx.Exec(r.Context(), `INSERT INTO contact_preferences(case_id,preferred_channel,safe_hours_start,safe_hours_end,time_zone) VALUES($1,$2,$3::time,$4::time,$5)`, caseID, req.SafeContactPreference.PreferredChannel, req.SafeContactPreference.SafeHoursStart, req.SafeContactPreference.SafeHoursEnd, req.SafeContactPreference.TimeZone); err != nil {
+		writeError(w, 503, "db_error", "Report not confirmed; retry")
+		return
+	}
 	// Link session to case
 	_, err = tx.Exec(r.Context(), `
 		UPDATE private_sessions SET case_id = $1 WHERE id = $2
@@ -273,7 +317,7 @@ func (h *SessionHandler) HandleSafeView(w http.ResponseWriter, r *http.Request) 
 func safeProgressMessage(status string) string {
 	switch status {
 	case "RECEIVED":
-		return "Your message has been received safely. Someone will look at it soon."
+		return "Your report has been saved. A responder has not accepted it yet."
 	case "TRIAGE":
 		return "Your message is being reviewed by our team."
 	case "ASSIGNED":
@@ -307,8 +351,8 @@ func (h *StaffHandler) Routes() http.Handler {
 	r := chi.NewRouter()
 	r.Get("/", h.HandleList)
 	r.Get("/{caseID}", h.HandleGet)
-	r.Post("/{caseID}/assignments", h.HandleAssign)
-	r.Post("/{caseID}/messages", h.HandleSendMessage)
+	// Assignment changes use the canonical /staff/assignments endpoint.
+	// Messages use the canonical /staff/messages endpoint.
 	return r
 }
 
@@ -322,26 +366,9 @@ func (h *StaffHandler) HandleList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	statusFilter := r.URL.Query().Get("status")
-	var rows pgx.Rows
-	var err error
-
-	if statusFilter != "" {
-		rows, err = h.pool.Query(r.Context(), `
-			SELECT id, status, route_type, conflict_flag, created_at, updated_at, version
-			FROM cases
-			WHERE organization_id = $1 AND status = $2::case_status
-			ORDER BY created_at DESC LIMIT 50
-		`, claims.OrganizationID, statusFilter)
-	} else {
-		rows, err = h.pool.Query(r.Context(), `
-			SELECT id, status, route_type, conflict_flag, created_at, updated_at, version
-			FROM cases
-			WHERE organization_id = $1
-			ORDER BY created_at DESC LIMIT 50
-		`, claims.OrganizationID)
-	}
+	rows, err := h.pool.Query(r.Context(), `SELECT c.id,c.status,c.route_type,c.conflict_flag,c.created_at,c.updated_at,c.version FROM cases c WHERE c.organization_id=$1 AND ($2='' OR c.status::text=$2) AND ($3 IN ('supervisor','admin','alert_preparer','alert_approver') OR EXISTS(SELECT 1 FROM assignments a WHERE a.case_id=c.id AND a.responder_id=$4 AND a.unassigned_at IS NULL) OR EXISTS(SELECT 1 FROM case_access_grants g WHERE g.case_id=c.id AND g.staff_id=$4 AND g.revoked_at IS NULL)) ORDER BY c.created_at DESC LIMIT 50`, claims.OrganizationID, statusFilter, claims.Role, claims.StaffID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "db_error", "")
+		writeError(w, 503, "unavailable", "Could not load reports")
 		return
 	}
 	defer rows.Close()
@@ -414,104 +441,26 @@ func (h *StaffHandler) HandleGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !authMW.CanReadCase(r.Context(), h.pool, claims, caseID) {
+		writeError(w, 403, "case_access_required", "Only assigned staff or a supervisor can open this report")
+		return
+	}
+	var contact ContactPreference
+	if err = h.pool.QueryRow(r.Context(), `SELECT COALESCE(preferred_channel,'no_contact'),COALESCE(safe_hours_start::text,'00:00'),COALESCE(safe_hours_end::text,'00:00'),time_zone FROM contact_preferences WHERE case_id=$1`, caseID).Scan(&contact.PreferredChannel, &contact.SafeHoursStart, &contact.SafeHoursEnd, &contact.TimeZone); err != nil {
+		contact.PreferredChannel = "no_contact"
+	}
+
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"case_id":       caseID,
-		"status":        status,
-		"route_type":    routeType,
-		"account_text":  accountText,
-		"conflict_flag": conflictFlag,
-		"created_at":    createdAt,
-		"updated_at":    updatedAt,
-		"version":       version,
+		"case_id":                 caseID,
+		"status":                  status,
+		"route_type":              routeType,
+		"account_text":            accountText,
+		"safe_contact_preference": contact,
+		"conflict_flag":           conflictFlag,
+		"created_at":              createdAt,
+		"updated_at":              updatedAt,
+		"version":                 version,
 	})
-}
-
-// HandleAssign creates an assignment for a case.
-func (h *StaffHandler) HandleAssign(w http.ResponseWriter, r *http.Request) {
-	claims := authMW.GetStaffClaims(r.Context())
-	if claims == nil {
-		writeError(w, http.StatusUnauthorized, "unauthorized", "")
-		return
-	}
-	if claims.Role != "supervisor" && claims.Role != "admin" {
-		writeError(w, http.StatusForbidden, "insufficient_role", "Only supervisors can assign cases")
-		return
-	}
-
-	caseID := chi.URLParam(r, "caseID")
-	var req struct {
-		ResponderID string `json:"responder_id"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.ResponderID == "" {
-		writeError(w, http.StatusBadRequest, "invalid_request", "responder_id required")
-		return
-	}
-
-	// Verify case belongs to this org
-	var orgID string
-	if err := h.pool.QueryRow(r.Context(), `SELECT organization_id FROM cases WHERE id = $1`, caseID).
-		Scan(&orgID); err != nil || orgID != claims.OrganizationID {
-		writeError(w, http.StatusForbidden, "forbidden", "Not authorized for this case")
-		return
-	}
-
-	assignmentID := uuid.New()
-	escalationDue := time.Now().Add(60 * time.Minute)
-
-	_, err := h.pool.Exec(r.Context(), `
-		INSERT INTO assignments (id, case_id, responder_id, organization_id, assigned_by, escalation_due_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
-	`, assignmentID, caseID, req.ResponderID, claims.OrganizationID, claims.StaffID, escalationDue)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "db_error", "Could not create assignment")
-		return
-	}
-
-	// Update case status to ASSIGNED
-	_, _ = h.pool.Exec(r.Context(), `
-		UPDATE cases SET status = 'ASSIGNED', updated_at = NOW(), version = version + 1 WHERE id = $1
-	`, caseID)
-
-	writeJSON(w, http.StatusCreated, map[string]string{"assignment_id": assignmentID.String()})
-}
-
-// HandleSendMessage sends a message on a case (staff side).
-func (h *StaffHandler) HandleSendMessage(w http.ResponseWriter, r *http.Request) {
-	claims := authMW.GetStaffClaims(r.Context())
-	if claims == nil {
-		writeError(w, http.StatusUnauthorized, "unauthorized", "")
-		return
-	}
-
-	caseID := chi.URLParam(r, "caseID")
-	var req struct {
-		Body        string `json:"body"`
-		IsStaffNote bool   `json:"is_staff_note"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Body == "" {
-		writeError(w, http.StatusBadRequest, "invalid_request", "body required")
-		return
-	}
-
-	// Verify org scope
-	var orgID string
-	if err := h.pool.QueryRow(r.Context(), `SELECT organization_id FROM cases WHERE id = $1`, caseID).
-		Scan(&orgID); err != nil || orgID != claims.OrganizationID {
-		writeError(w, http.StatusForbidden, "forbidden", "Not authorized for this case")
-		return
-	}
-
-	msgID := uuid.New()
-	_, err := h.pool.Exec(r.Context(), `
-		INSERT INTO case_messages (id, case_id, sender_type, sender_id, body, is_staff_note)
-		VALUES ($1, $2, 'responder', $3, $4, $5)
-	`, msgID, caseID, claims.StaffID, req.Body, req.IsStaffNote)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "db_error", "Could not send message")
-		return
-	}
-
-	writeJSON(w, http.StatusCreated, map[string]string{"message_id": msgID.String()})
 }
 
 func writeError(w http.ResponseWriter, status int, code, msg string) {

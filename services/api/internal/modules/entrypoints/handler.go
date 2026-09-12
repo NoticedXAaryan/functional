@@ -46,7 +46,7 @@ func (h *Handler) HandleResolve(w http.ResponseWriter, r *http.Request) {
 		SELECT ep.id, v.name, ep.active, ep.service_hours, ep.languages, ep.routes_available
 		FROM entry_points ep
 		JOIN venues v ON v.id = ep.venue_id
-		WHERE ep.opaque_id = $1
+		WHERE ep.opaque_id = $1 AND ep.revoked_at IS NULL AND v.active
 	`, opaqueID).Scan(&epID, &venueName, &active, &serviceHours, &languages, &routes)
 
 	if err == pgx.ErrNoRows {

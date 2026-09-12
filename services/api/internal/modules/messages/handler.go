@@ -124,6 +124,7 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 // Only the assigned/accepting staff member's org may send.
 // The sender_id is always set to the authenticated staff member — callers cannot spoof it.
 func (h *Handler) HandleSend(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 16000)
 	claims := authMW.GetStaffClaims(r.Context())
 	if claims == nil {
 		writeError(w, http.StatusUnauthorized, "unauthorized", "Staff authorization required")
@@ -164,9 +165,9 @@ func (h *Handler) HandleSend(w http.ResponseWriter, r *http.Request) {
 	msgID := uuid.New()
 	senderID := claims.StaffID
 
-	_, err := h.pool.Exec(r.Context(), `
+	result, err := h.pool.Exec(r.Context(), `
 		INSERT INTO case_messages (id, case_id, sender_type, sender_id, body, is_staff_note)
-		VALUES ($1, $2, 'responder', $3, $4, $5)
+		SELECT $1, c.id, 'responder', $3, $4, $5 FROM cases c WHERE c.id=$2 AND c.status<>'CLOSED' AND ($5 OR EXISTS(SELECT 1 FROM contact_preferences cp WHERE cp.case_id=c.id AND cp.preferred_channel='message_in_app' AND (cp.safe_hours_start=cp.safe_hours_end OR (cp.safe_hours_start<cp.safe_hours_end AND (NOW() AT TIME ZONE cp.time_zone)::time >= cp.safe_hours_start AND (NOW() AT TIME ZONE cp.time_zone)::time < cp.safe_hours_end) OR (cp.safe_hours_start>cp.safe_hours_end AND ((NOW() AT TIME ZONE cp.time_zone)::time >= cp.safe_hours_start OR (NOW() AT TIME ZONE cp.time_zone)::time < cp.safe_hours_end)))))
 	`, msgID, req.CaseID, senderID, req.Body, req.IsStaffNote)
 	if err != nil {
 		log.Error().Err(err).Str("case_id", req.CaseID).Msg("failed to insert message")
@@ -175,6 +176,10 @@ func (h *Handler) HandleSend(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Advance case status to IN_PROGRESS on first non-note responder message,
+	if result.RowsAffected() != 1 {
+		writeError(w, 409, "contact_not_allowed", "Message not sent: the report is closed, contact is disabled, or it is outside safe contact hours")
+		return
+	}
 	// if it was in ACCEPTED state. (Best-effort; does not fail the send.)
 	if !req.IsStaffNote {
 		_, _ = h.pool.Exec(r.Context(), `
@@ -192,10 +197,10 @@ func (h *Handler) HandleSend(w http.ResponseWriter, r *http.Request) {
 		Msg("message sent")
 
 	writeJSON(w, http.StatusCreated, map[string]interface{}{
-		"message_id":   msgID.String(),
-		"case_id":      req.CaseID,
+		"message_id":    msgID.String(),
+		"case_id":       req.CaseID,
 		"is_staff_note": req.IsStaffNote,
-		"sent_at":      time.Now(),
+		"sent_at":       time.Now(),
 	})
 }
 
@@ -380,6 +385,10 @@ func (h *Handler) enforceCaseOrgScope(
 
 		writeError(w, http.StatusForbidden, "forbidden",
 			"Not authorized to access this case. This access attempt has been logged.")
+		return true
+	}
+	if !authMW.CanReadCase(r.Context(), h.pool, claims, caseID) {
+		writeError(w, 403, "case_access_required", "Only assigned staff or a supervisor can open this report")
 		return true
 	}
 	return false

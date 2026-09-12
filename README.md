@@ -6,13 +6,15 @@ The interface uses a light colour palette, four clear home choices, and layouts 
 
 **Current status:** a functioning synthetic demonstration, with important gaps before real-world use. The public app is not an emergency dispatch service. Use fictional reports and invited adult testers. [Read the audit and completion plan](docs/13-system-audit-and-completion-plan.md).
 
+**Beta engineering update:** [Read the latest beta handoff](docs/14-beta-handoff.md) for secure return codes, enforced contact preferences, staff assignment, private tip review and same-domain HTTPS deployment. The local preview remains separate from a configured, staffed beta. No behavioral tests were run for this update at the user's request.
+
 ## Which screen do I open?
 
 | I want to… | Open | What happens |
 | --- | --- | --- |
 | Ask for help or report a missing child | [Public app](http://localhost:5173) | Submit a private report without an account |
-| Explore “Is this okay?” | Public app → Is this okay? | See simulated guidance; this is not a live safety assessment |
-| Check a submitted report | Public app → Check a report | Enter the private return words; this remains a demo feature |
+| Report concern for someone else | Public app → Worried about someone? | Send a private concern to the configured support organization |
+| Check a submitted report | Public app → Check a report | Enter the private return code; this remains a demo feature |
 | Review reports or prepare an alert | [Staff workspace](http://localhost:5174) | Sign in, open Cases or Alert Review |
 | Read local alerts or manage notifications | [Savera Alert](http://localhost:5173/alerts) | Choose a registered area, read current alerts and optionally enroll this browser |
 | Share a sighting | Open an active alert → private tip form | Save a tip and receive a receipt |
@@ -65,7 +67,7 @@ For a different API address, set `VITE_API_BASE_URL` in each application's `.env
 
 1. Open the public app and choose **Ask for help**.
 2. Choose **Report a missing child** and enter an explicitly fictional example. Review and submit it.
-3. Keep the receipt and return words privately. A receipt means the database saved the report, not that a responder has read it.
+3. Keep the receipt and return code privately. A receipt means the database saved the report, not that a responder has read it.
 4. Open the staff workspace. Sign in as **preparer.demo**, password **demo-password**.
 5. Open **Cases** to see the report. Open **Alert Review** to create a draft: choose the missing-child case and fictional area, add an appropriate public description, issuer, verification reference and expiry.
 6. Sign out. Sign in as **approver.demo**, password **demo-password**, and approve the draft. The preparer cannot approve their own draft.
@@ -79,11 +81,11 @@ Demo credentials are seeded for local fictional use. They are not production acc
 
 | Feature | Current value | Important limit |
 | --- | --- | --- |
-| Private report + receipt | Real database-backed intake | Routing, safe-contact enforcement and return security need completion |
-| Staff cases and messages | Separate operating workspace | Assignment workflow and staffed escalation remain incomplete |
+| Private report + receipt | Database-backed intake, secure return code, saved contact choices | New beta changes compile but have not been behaviorally verified |
+| Staff cases and messages | Assignment picker, private narrative, contact rules and two-way messages | Actual staff/identity setup and operational escalation remain required |
 | Savera Alert | Separate approval, registered areas, public status, private tips | No government authorization or nationwide broadcast integration |
 | Web Push | Encrypted delivery implementation, durable queue, retries, revocation | Real-device receipt still needs an observed rehearsal |
-| “Is this okay?” | Demonstrates a voluntary guidance flow | Simulated output, not live AI |
+| “Is this okay?” | Deferred from public beta navigation | An eligible live AI provider has not been configured |
 | Quick exit | Leaves the screen quickly | Does not erase history, device copies or retained reports |
 | QR entry | Demonstration entry experience | Verified physical placement and routing are not connected |
 | Languages | Captures language preference | Most screens remain English |

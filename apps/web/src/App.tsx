@@ -4,10 +4,11 @@ import './App.css';
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1';
 
 interface PrivateSession {
+ session_id: string;
+ return_code?: string;
   session_token: string;
   expires_at: string;
-  return_secret_words?: string[];
-}
+  }
 
 interface CaseReceipt {
   case_id: string;
@@ -17,6 +18,7 @@ interface CaseReceipt {
 }
 
 interface CaseSafeView {
+  safe_progress_message?: string;
   case_id: string;
   status: string;
   created_at: string;
@@ -59,11 +61,21 @@ function App() {
 
   // Receipt & Case State
   const [receipt, setReceipt] = useState<CaseReceipt | null>(null);
-  const [returnSecretWords, setReturnSecretWords] = useState<string[]>(['', '', '', '']);
+  const [returnCode, setReturnCode] = useState('');
+ const [invitation,setInvitation]=useState('');
+ const [service,setService]=useState<{mode:string;invitation_required:boolean;intake_open:boolean;assessment_available:boolean}|null>(null);
+ const [entryID,setEntryID]=useState<string|null>(null);
+ const [entryReady,setEntryReady]=useState(false);
+ useEffect(()=>{ fetch(`${API_BASE}/config`).then(r=>{if(!r.ok)throw new Error('Service unavailable');return r.json()}).then(setService).catch(()=>setErrorMsg('The service is unavailable. Please try again later.'));
+ const entry=new URLSearchParams(window.location.search).get('entry');
+ if(!entry){setEntryReady(true);return}
+ fetch(`${API_BASE}/entry-points/${encodeURIComponent(entry)}`).then(r=>{if(!r.ok)throw new Error('This support link is unavailable.');return r.json()}).then(data=>{setEntryID(data.id);setEntryReady(true)}).catch(e=>setErrorMsg(e.message));
+ },[]);
 
   // Case Return Access State
   const [returnCaseView, setReturnCaseView] = useState<CaseSafeView | null>(null);
   const [messages, setMessages] = useState<Array<{ id: string; sender_type: string; body: string; sent_at: string }>>([]);
+  const [reply, setReply] = useState('');
 
   // ── Auto Inactivity Teardown (P2 Privacy Guarantee) ───────────────────
   useEffect(() => {
@@ -111,7 +123,8 @@ function App() {
 
   // ── Incognito Quick Exit ──────────────────────────────────────────────
   const handleQuickExit = () => {
-    setSession(null);
+    if(session) void fetch(`${API_BASE}/sessions/${session.session_id}`,{method:'DELETE',headers:{Authorization:`Bearer ${session.session_token}`},keepalive:true}).catch(()=>{});
+    setReturnCode(''); setReply(''); setAccountText(''); setAssessmentText(''); setSession(null);
     setReceipt(null);
     setReturnCaseView(null);
     setMessages([]);
@@ -119,8 +132,10 @@ function App() {
     window.location.replace('https://news.google.com');
   };
 
+  useEffect(()=>{ const clearOnRestore=(event:PageTransitionEvent)=>{if(event.persisted) window.location.reload()};window.addEventListener('pageshow',clearOnRestore);return()=>window.removeEventListener('pageshow',clearOnRestore)},[]);
   // ── Step 1: Start Private Session ────────────────────────────────────
   const handleStartSession = async (targetTab: 'intake' | 'assessment' = 'intake') => {
+    if(!service?.intake_open || !entryReady){setErrorMsg('Reporting is not available through this link yet.');return}
     setLoading(true);
     setErrorMsg(null);
     try {
@@ -130,13 +145,16 @@ function App() {
         body: JSON.stringify({
           mode: 'with_return_access',
           language,
+          invitation_code:invitation,
+          ...(entryID?{entry_point_id:entryID}:{}),
         }),
       });
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error?.message || 'Failed to initialize session');
+        throw new Error((typeof data.error === 'string' ? data.error : data.error?.message) || 'Failed to initialize session');
       }
       setSession(data);
+      submissionKey.current=null; setReceipt(null); setReturnCaseView(null); setMessages([]);
       setActiveTab(targetTab);
     } catch (err: any) {
       setErrorMsg(err.message);
@@ -244,8 +262,8 @@ function App() {
   // ── Step 4: Return Access by Secret ──────────────────────────────────
   const handleReturnAccess = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (returnSecretWords.some(w => !w.trim())) {
-      setErrorMsg('Please enter all 4 return secret words');
+    if (!returnCode.trim()) {
+      setErrorMsg('Enter the return code shown with your receipt');
       return;
     }
 
@@ -256,17 +274,17 @@ function App() {
       const res = await fetch(`${API_BASE}/session-access`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ words: returnSecretWords.map(w => w.trim().toLowerCase()) }),
+        body: JSON.stringify({ return_code: returnCode }),
       });
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error?.message || 'Invalid return words or access expired');
+        throw new Error(data.error?.message || 'Return code is invalid or expired');
       }
 
       const newToken = data.session_token;
       const caseID = data.case_id;
-      setSession({ session_token: newToken, expires_at: data.expires_at });
+      setSession({ session_id:data.session_id, session_token: newToken, expires_at: data.expires_at });
 
       const caseRes = await fetch(`${API_BASE}/cases/${caseID}/safe-view`, {
         headers: { 'Authorization': `Bearer ${newToken}` },
@@ -319,15 +337,6 @@ function App() {
           Start here
         </button>
         <button
-          className={`nav-tab ${activeTab === 'assessment' ? 'active' : ''}`}
-          onClick={() => {
-            if (!session) handleStartSession('assessment');
-            else setActiveTab('assessment');
-          }}
-        >
-          Is this okay?
-        </button>
-        <button
           className={`nav-tab ${activeTab === 'intake' ? 'active' : ''}`}
           onClick={() => {
             if (!session) handleStartSession('intake');
@@ -364,15 +373,16 @@ function App() {
           <p className="welcome-kicker">Help for children and young people</p>
           <h1>What would you like to do?</h1>
           <p className="welcome-lead">Send a private report, check a report you already sent, or read missing-child alerts in your area.</p>
+          {service?.invitation_required && <div className="form-group"><label htmlFor="beta-invite" className="form-label">Your organization's invitation code</label><input id="beta-invite" type="password" className="glass-input" autoComplete="off" value={invitation} onChange={e=>setInvitation(e.target.value)}/><small>Needed to start a report during the limited beta.</small></div>}
           <div className="choice-grid">
-            <button className="choice choice-help" disabled={loading} onClick={() => session ? setActiveTab('intake') : void handleStartSession('intake')}>
+            <button className="choice choice-help" disabled={loading || !service?.intake_open || !entryReady} onClick={() => session && !receipt && !returnCaseView ? setActiveTab('intake') : void handleStartSession('intake')}>
               <strong>Ask for help</strong><span>For yourself, someone you care about, or a missing child.</span><em>{loading ? 'Opening…' : 'Start a private report →'}</em>
             </button>
-            <button className="choice choice-understand" disabled={loading} onClick={() => session ? setActiveTab('assessment') : void handleStartSession('assessment')}>
-              <strong>Is this okay?</strong><span>See an example of guidance about bullying or uncomfortable messages.</span><em>See example guidance →</em>
+            <button className="choice choice-understand" disabled={loading || !service?.intake_open || !entryReady} onClick={() => { setRouteType('worried_about_someone'); if(session && !receipt && !returnCaseView) setActiveTab('intake'); else void handleStartSession('intake'); }}>
+              <strong>Worried about someone?</strong><span>Tell the support team about a friend or child who may need help.</span><em>Share your concern →</em>
             </button>
             <button className="choice choice-return" onClick={() => setActiveTab('return')}>
-              <strong>Check your report</strong><span>Already sent a report? Enter the four words you received to check for replies.</span><em>Open your report →</em>
+              <strong>Check your report</strong><span>Already sent a report? Enter the private return code you received to check for replies.</span><em>Open your report →</em>
             </button>
             <a className="choice choice-alerts" href="/alerts"><strong>Local alerts</strong><span>Read Savera alerts for your area and share a private tip.</span><em>View community alerts →</em></a>
           </div>
@@ -384,10 +394,10 @@ function App() {
             <small>Screens are currently in English.</small>
           </div>
           <details className="getting-started"><summary>How does a private report work?</summary>
-            <ol><li>Describe what happened. You do not need an account.</li><li>Review and send it. Your receipt confirms the report was saved.</li><li>Keep your return words privately to check for replies.</li></ol>
+            <ol><li>Describe what happened. You do not need an account.</li><li>Review and send it. Your receipt confirms the report was saved.</li><li>Keep your return code privately to check for replies.</li></ol>
             <p>Quick exit leaves the page. It does not erase browser history or a submitted report.</p>
           </details>
-          <p className="preview-note">Preview service · Use fictional details while response and privacy safeguards are being completed. Guidance is simulated.</p>
+          {service?.mode === 'demo' ? <p className="preview-note">Local preview · use fictional details only.</p> : <p className="preview-note">Limited beta · reports go to your configured support organization. This is not an emergency dispatch service.</p>}
         </main>
       )}
 
@@ -472,7 +482,7 @@ function App() {
           <div className="form-heading" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
             <div>
               <h2 className="section-title">Ask for help</h2>
-              <p className="section-desc" style={{ margin: 0 }}>Use fictional details in this demo. Submitting saves your report for the support team.</p>
+              <p className="section-desc" style={{ margin: 0 }}>{service?.mode === 'demo' ? 'Use fictional details in this local preview.' : 'Submitting saves your report for your support organization.'}</p>
             </div>
             <span className="badge badge-emerald">Report open</span>
           </div>
@@ -533,7 +543,7 @@ function App() {
             </select>
           </div>
 
-          <p className="section-desc">Contact preferences below demonstrate the planned flow. They are not yet enforced by the service; use fictional details only.</p>
+          <p className="section-desc">Your choice controls in-app replies. No phone, email or push contact is sent from this report.</p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }} className="form-group">
             <div>
               <label htmlFor="contact-channel" className="form-label">How would you like to hear from us?</label>
@@ -548,10 +558,10 @@ function App() {
               </select>
             </div>
             <div>
-              <label className="form-label">Safe Contact Hours</label>
+              <label className="form-label">When may staff reply? (India time)</label>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                 <input
-                  aria-label="Safe contact start time"
+                  aria-label="Safe contact start time in India"
                   type="time"
                   className="glass-input"
                   value={safeHoursStart}
@@ -559,7 +569,7 @@ function App() {
                 />
                 <span>to</span>
                 <input
-                  aria-label="Safe contact end time"
+                  aria-label="Safe contact end time in India"
                   type="time"
                   className="glass-input"
                   value={safeHoursEnd}
@@ -622,21 +632,7 @@ function App() {
             </div>
           </div>
 
-          {session?.return_secret_words && (
-            <div style={{ background: 'rgba(6, 182, 212, 0.05)', border: '1px solid var(--accent-cyan)', padding: '24px', borderRadius: 'var(--radius-lg)', margin: '0 auto 28px', maxWidth: '640px' }}>
-              <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--accent-cyan)', marginBottom: '4px' }}>
-                🔑 Your four return words
-              </div>
-              <div className="mnemonic-grid">
-                {session.return_secret_words.map((word, idx) => (
-                  <div className="mnemonic-card" key={idx}>
-                    <div className="mnemonic-num">WORD #{idx + 1}</div>
-                    <div className="mnemonic-word">{word}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          {session?.return_code && <section className="getting-started"><h3>Your private return code</h3><p>Save this code somewhere only you can access. It opens your report for 30 days. If lost, it cannot be recovered.</p><code style={{display:'block',overflowWrap:'anywhere',padding:'16px 0',userSelect:'all'}}>{session.return_code.match(/.{1,16}/g)?.join('-')}</code><p>Your receipt number alone cannot open your report.</p></section>}
 
           <button className="btn-primary" onClick={() => setActiveTab('return')}>
             Check your report →
@@ -650,23 +646,8 @@ function App() {
           <h2 className="section-title" style={{ textAlign: 'center' }}>Check your report</h2>
           {!returnCaseView ? (
             <form onSubmit={handleReturnAccess} style={{ maxWidth: '580px', margin: '0 auto' }}>
-              <div className="secret-input-grid">
-                {[0, 1, 2, 3].map((idx) => (
-                  <input
-                    key={idx}
-                    type="text"
-                    className="glass-input secret-word-input"
-                    aria-label={`Return word ${idx + 1}`}
-                    placeholder={`Word #${idx + 1}`}
-                    value={returnSecretWords[idx]}
-                    onChange={(e) => {
-                      const updated = [...returnSecretWords];
-                      updated[idx] = e.target.value;
-                      setReturnSecretWords(updated);
-                    }}
-                  />
-                ))}
-              </div>
+              <label htmlFor="return-code" className="form-label">Private return code</label><textarea id="return-code" className="glass-input" value={returnCode} onChange={e=>setReturnCode(e.target.value)} autoComplete="off" spellCheck={false} rows={3} placeholder="Paste the code shown on your receipt"/>
+              <p className="section-desc">Use the long code from your receipt. Older four-word preview codes no longer work.</p>
               <div style={{ textAlign: 'center', marginTop: '20px' }}>
                 <button type="submit" className="btn-primary" disabled={loading}>
                   {loading ? 'Opening…' : 'Open my report →'}
@@ -683,10 +664,22 @@ function App() {
                 <span className="badge badge-cyan">{returnCaseView.status}</span>
               </div>
               <section aria-label="Messages from the support team">
+                <p>{returnCaseView.safe_progress_message}</p>
                 <h3>Messages</h3>
                 {messages.length === 0 && <p>No messages yet.</p>}
                 {messages.map(message => <article key={message.id} style={{ padding: '16px', margin: '12px 0', border: '1px solid var(--border-color)', borderRadius: '8px' }}><p style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{message.body}</p><small>{new Date(message.sent_at).toLocaleString()}</small></article>)}
               </section>
+              {returnCaseView.status !== 'CLOSED' && <form onSubmit={async e => {
+                e.preventDefault(); if(!session || !reply.trim()) return; setLoading(true); setErrorMsg(null);
+                try {
+                  const res=await fetch(`${API_BASE}/cases/${returnCaseView.case_id}/messages`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${session.session_token}`},body:JSON.stringify({body:reply.trim()})});
+                  const data=await res.json(); if(!res.ok) throw new Error(data.error || 'Message was not confirmed');
+                  setReply('');
+                  const refreshed=await fetch(`${API_BASE}/cases/${returnCaseView.case_id}/messages`,{headers:{Authorization:`Bearer ${session.session_token}`}});
+                  if(!refreshed.ok) throw new Error('Your message was saved, but replies could not be refreshed. Reopen your report.');
+                  setMessages((await refreshed.json()).messages || []);
+                } catch(error) {setErrorMsg((error as Error).message)} finally {setLoading(false)}
+              }}><label htmlFor="report-reply" className="form-label">Add a message</label><textarea id="report-reply" className="glass-input" rows={3} maxLength={5000} value={reply} onChange={e=>setReply(e.target.value)}/><button className="btn-primary" disabled={loading || !reply.trim()}>{loading ? 'Sending…' : 'Send message'}</button></form>}
             </div>
           )}
         </main>

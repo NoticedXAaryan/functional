@@ -122,6 +122,10 @@ func main() {
 
 	// ── API v1 routes ──────────────────────────────────────────────────────
 	r.Route("/api/v1", func(r chi.Router) {
+		r.Get("/config", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"mode": cfg.AppMode, "invitation_required": cfg.AppMode != config.AppModeDemo, "intake_open": cfg.AppMode == config.AppModeDemo || (os.Getenv("BETA_INTAKE_ENABLED") == "true" && len(os.Getenv("BETA_INVITATION_CODE")) >= 24), "assessment_available": cfg.AppMode == config.AppModeDemo})
+		})
 
 		// Entry points (public, no auth)
 		r.Mount("/entry-points", entrypoints.NewHandler(pool, cfg).Routes())

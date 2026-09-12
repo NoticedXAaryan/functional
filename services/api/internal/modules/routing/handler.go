@@ -42,14 +42,14 @@ func (h *Handler) Routes() http.Handler {
 }
 
 type RouteDecision struct {
-	CaseID               string   `json:"case_id"`
-	OriginalOrgID        string   `json:"original_org_id"`
-	EffectiveOrgID       string   `json:"effective_org_id"`
-	ConflictFlag         *string  `json:"conflict_flag,omitempty"`
-	IsIndependentRoute   bool     `json:"is_independent_route"`
-	ImplicatedOrgBlocked bool     `json:"implicated_org_blocked"`
-	Reason               string   `json:"reason"`
-	AssignedRouteTarget  string   `json:"assigned_route_target"`
+	CaseID               string    `json:"case_id"`
+	OriginalOrgID        string    `json:"original_org_id"`
+	EffectiveOrgID       string    `json:"effective_org_id"`
+	ConflictFlag         *string   `json:"conflict_flag,omitempty"`
+	IsIndependentRoute   bool      `json:"is_independent_route"`
+	ImplicatedOrgBlocked bool      `json:"implicated_org_blocked"`
+	Reason               string    `json:"reason"`
+	AssignedRouteTarget  string    `json:"assigned_route_target"`
 	EvaluatedAt          time.Time `json:"evaluated_at"`
 }
 
@@ -87,21 +87,21 @@ func (h *Handler) HandleEvaluateRouting(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Enforce org scope (unless independent supervisor)
-	if orgID != staffClaims.OrganizationID && staffClaims.Role != "SUPERVISOR" && staffClaims.Role != "ADMIN" {
+	if orgID != staffClaims.OrganizationID || (staffClaims.Role != "supervisor" && staffClaims.Role != "admin") {
 		writeError(w, http.StatusForbidden, "forbidden", "Cross-organization routing denied")
 		return
 	}
 
 	decision := RouteDecision{
-		CaseID:              caseID.String(),
-		OriginalOrgID:       orgID,
-		EffectiveOrgID:      orgID,
-		ConflictFlag:        conflictFlag,
-		IsIndependentRoute:  false,
+		CaseID:               caseID.String(),
+		OriginalOrgID:        orgID,
+		EffectiveOrgID:       orgID,
+		ConflictFlag:         conflictFlag,
+		IsIndependentRoute:   false,
 		ImplicatedOrgBlocked: false,
-		Reason:              "Standard local org intake routing",
-		AssignedRouteTarget: "LOCAL_RESPONDER_POOL",
-		EvaluatedAt:         time.Now(),
+		Reason:               "Standard local org intake routing",
+		AssignedRouteTarget:  "LOCAL_RESPONDER_POOL",
+		EvaluatedAt:          time.Now(),
 	}
 
 	if conflictFlag != nil {

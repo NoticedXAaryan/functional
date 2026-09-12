@@ -8,6 +8,8 @@
 package tips
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -38,6 +40,7 @@ func NewPublicHandler(pool *db.Pool, cfg *config.Config) *PublicHandler {
 // HandleCreate accepts a tip and returns an opaque receipt.
 // The sighting content is never returned to the submitter.
 func (h *PublicHandler) HandleCreate(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 12000)
 	// Idempotency-Key prevents duplicate submissions on retry
 	idempotencyKeyStr := r.Header.Get("Idempotency-Key")
 	if idempotencyKeyStr == "" {
@@ -79,12 +82,34 @@ func (h *PublicHandler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len(req.ApproximateLocation) > 500 || (req.ContactPreference != "" && req.ContactPreference != "no_contact") {
+		writeError(w, 400, "invalid_request", "Use an approximate location and no contact details")
+		return
+	}
+	encoded, _ := json.Marshal(req)
+	hash := sha256.Sum256(encoded)
+	digest := hex.EncodeToString(hash[:])
+	tx, err := h.pool.Begin(r.Context())
+	if err != nil {
+		writeError(w, 503, "unavailable", "Try again")
+		return
+	}
+	defer tx.Rollback(r.Context())
+	if _, err = tx.Exec(r.Context(), `SELECT pg_advisory_xact_lock(hashtextextended($1,32))`, idempotencyKey.String()); err != nil {
+		writeError(w, 503, "unavailable", "Try again")
+		return
+	}
 	// Idempotency: check if this key already exists
 	var existingReceiptID uuid.UUID
-	err = h.pool.QueryRow(r.Context(),
-		`SELECT id FROM tips WHERE idempotency_key = $1`, idempotencyKey,
-	).Scan(&existingReceiptID)
+	var existingDigest *string
+	err = tx.QueryRow(r.Context(),
+		`SELECT id,submission_digest FROM tips WHERE idempotency_key = $1`, idempotencyKey,
+	).Scan(&existingReceiptID, &existingDigest)
 	if err == nil {
+		if existingDigest == nil || *existingDigest != digest {
+			writeError(w, 409, "key_used", "This submission key was already used for different content")
+			return
+		}
 		// Already submitted — return same receipt
 		w.Header().Set("Cache-Control", "no-store")
 		writeJSON(w, http.StatusCreated, map[string]interface{}{
@@ -101,8 +126,8 @@ func (h *PublicHandler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 
 	// Verify alert exists and is ACTIVE
 	var alertStatus string
-	err = h.pool.QueryRow(r.Context(),
-		`SELECT status FROM alerts WHERE id = $1`, alertID,
+	err = tx.QueryRow(r.Context(),
+		`SELECT a.status FROM alerts a JOIN alert_revisions ar ON ar.id=a.active_revision_id JOIN alert_areas area ON area.id=ar.area_id WHERE a.id=$1 AND ar.expiry_at>NOW() AND ar.status='APPROVED' AND area.active AND EXISTS(SELECT 1 FROM alert_approvals ap WHERE ap.revision_id=ar.id AND ap.decision='approve') FOR UPDATE OF a`, alertID,
 	).Scan(&alertStatus)
 	if err == pgx.ErrNoRows {
 		writeError(w, http.StatusNotFound, "alert_not_found", "Alert not found")
@@ -120,17 +145,21 @@ func (h *PublicHandler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tipID := uuid.New()
-	_, err = h.pool.Exec(r.Context(), `
-		INSERT INTO tips (id, alert_id, idempotency_key, sighting_description, approximate_location, contact_preference, received_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	_, err = tx.Exec(r.Context(), `
+		INSERT INTO tips (id, alert_id, idempotency_key, sighting_description, approximate_location, contact_preference, received_at, submission_digest)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 	`, tipID, alertID, idempotencyKey, req.SightingDescription,
-		nullableStr(req.ApproximateLocation), nullableStr(req.ContactPreference), time.Now())
+		nullableStr(req.ApproximateLocation), nullableStr(req.ContactPreference), time.Now(), digest)
 	if err != nil {
 		log.Error().Err(err).Str("alert_id", alertID.String()).Msg("tips: failed to insert tip")
 		writeError(w, http.StatusInternalServerError, "db_error", "Could not record tip")
 		return
 	}
 
+	if tx.Commit(r.Context()) != nil {
+		writeError(w, 503, "unavailable", "Tip not confirmed; retry")
+		return
+	}
 	log.Info().Str("tip_id", tipID.String()).Str("alert_id", alertID.String()).Msg("tip received")
 
 	// Return ONLY the opaque receipt — never the sighting content
@@ -162,12 +191,12 @@ func (h *StaffHandler) Routes() http.Handler {
 
 // tipRow is the internal representation returned to authorized staff reviewers.
 type tipRow struct {
-	ID                  string     `json:"id"`
-	AlertID             string     `json:"alert_id"`
-	SightingDescription string     `json:"sighting_description"`
-	ApproximateLocation *string    `json:"approximate_location,omitempty"`
-	ContactPreference   *string    `json:"contact_preference,omitempty"`
-	ReceivedAt          time.Time  `json:"received_at"`
+	ID                  string    `json:"id"`
+	AlertID             string    `json:"alert_id"`
+	SightingDescription string    `json:"sighting_description"`
+	ApproximateLocation *string   `json:"approximate_location,omitempty"`
+	ContactPreference   *string   `json:"contact_preference,omitempty"`
+	ReceivedAt          time.Time `json:"received_at"`
 }
 
 // HandleList returns all tips for a given alert, scoped to the staff member's org.
@@ -179,6 +208,10 @@ func (h *StaffHandler) HandleList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if claims.Role != "supervisor" && claims.Role != "admin" && claims.Role != "alert_approver" {
+		writeError(w, 403, "forbidden", "Tip review requires supervisor or alert reviewer access")
+		return
+	}
 	alertIDStr := r.URL.Query().Get("alert_id")
 	if alertIDStr == "" {
 		writeError(w, http.StatusBadRequest, "missing_alert_id", "alert_id query parameter is required")

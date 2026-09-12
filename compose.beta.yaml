@@ -1,0 +1,73 @@
+name: balsuraksha-beta
+services:
+  postgres:
+    image: postgis/postgis:16-3.4-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: balsuraksha
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set a database password}
+      POSTGRES_DB: balsuraksha
+    volumes:
+      - beta_database:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U balsuraksha -d balsuraksha"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  api:
+    build:
+      context: .
+      dockerfile: infra/docker/api.Dockerfile
+    restart: unless-stopped
+    env_file: .env.beta.local
+    environment:
+      APP_MODE: beta
+      STAFF_AUTH_MODE: oidc
+      NOTIFICATION_MODE: ${NOTIFICATION_MODE:-DISABLED}
+      DATABASE_URL: ${DATABASE_URL:?Set internal database connection URL}
+      MIGRATION_PATH: /app/db/migrations
+      WEB_ORIGINS: https://${PUBLIC_HOST:?Set public hostname}
+      API_PORT: "8080"
+      API_HOST: 0.0.0.0
+      AI_ENABLED: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+  worker:
+    build:
+      context: .
+      dockerfile: infra/docker/worker.Dockerfile
+    restart: unless-stopped
+    env_file: .env.beta.local
+    environment:
+      APP_MODE: beta
+      NOTIFICATION_MODE: ${NOTIFICATION_MODE:-DISABLED}
+      DATABASE_URL: ${DATABASE_URL:?Set internal database connection URL}
+    depends_on:
+      api:
+        condition: service_healthy
+  web:
+    build:
+      context: .
+      dockerfile: infra/docker/beta-web.Dockerfile
+    restart: unless-stopped
+    environment:
+      PUBLIC_HOST: ${PUBLIC_HOST:?Set public hostname}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - beta_certificates:/data
+      - beta_caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+volumes:
+  beta_database:
+  beta_certificates:
+  beta_caddy_config:

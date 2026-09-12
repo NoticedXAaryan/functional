@@ -1,14 +1,14 @@
-// Package sessions implements private session creation, BIP-39 return secrets,
-// explicit exit (Incognito guarantee), and return-secret-based case access.
+// Package sessions implements short-lived private sessions and high-entropy return capabilities.
 package sessions
 
 import (
-	"context"
 	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
-	"fmt"
-	"math/big"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -16,15 +16,11 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
-	"golang.org/x/crypto/bcrypt"
 
 	"github.com/balsuraksha/api/internal/config"
 	"github.com/balsuraksha/api/internal/db"
 	authMW "github.com/balsuraksha/api/internal/middleware"
 )
-
-// maxAccessAttempts is the brute-force limit for return-secret access.
-const maxAccessAttempts = 10
 
 // sessionTTL is the active session lifetime. Inactivity also causes expiry server-side.
 const sessionTTL = 15 * time.Minute
@@ -44,17 +40,19 @@ func NewHandler(pool *db.Pool, cfg *config.Config) *Handler {
 func (h *Handler) Routes() http.Handler {
 	r := chi.NewRouter()
 	r.Post("/", h.HandleCreate)
-	r.Delete("/{sessionID}", h.HandleEnd)
+	// DELETE is mounted behind session authentication in the server router.
 	return r
 }
 
 // HandleCreate creates a new private session.
-// For with_return_access mode, generates a BIP-39 mnemonic and stores only the bcrypt hash.
+// Return access uses a random 256-bit code; only its digest is stored.
 func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 4096)
 	var req struct {
-		EntryPointID string `json:"entry_point_id"`
-		Mode         string `json:"mode"`
-		Language     string `json:"language"`
+		EntryPointID   string `json:"entry_point_id"`
+		InvitationCode string `json:"invitation_code"`
+		Mode           string `json:"mode"`
+		Language       string `json:"language"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", "Invalid JSON")
@@ -72,27 +70,33 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	jti := uuid.New()
 	expiresAt := time.Now().Add(sessionTTL)
 
-	// Generate return secret for with_return_access mode
-	var returnWords []string
-	var returnSecretHash string
-
+	var returnCode, returnDigest string
 	if req.Mode == "with_return_access" {
-		words, err := generateMnemonic(h.cfg.ReturnSecretWordCount)
-		if err != nil {
-			log.Error().Err(err).Msg("failed to generate return secret")
-			writeError(w, http.StatusInternalServerError, "secret_generation_failed", "Could not generate return secret")
+		raw := make([]byte, 32)
+		if _, err := rand.Read(raw); err != nil {
+			writeError(w, 500, "random_failed", "Could not start; try again")
 			return
 		}
-		returnWords = words
-
-		// Hash the joined mnemonic phrase. Plaintext is discarded after response.
-		phrase := strings.Join(words, " ")
-		hashBytes, err := bcrypt.GenerateFromPassword([]byte(phrase), bcrypt.DefaultCost)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "hash_failed", "Could not hash return secret")
+		returnCode = hex.EncodeToString(raw)
+		returnDigest = digestCode(returnCode)
+	}
+	if h.cfg.AppMode != config.AppModeDemo {
+		invitation := os.Getenv("BETA_INVITATION_CODE")
+		if os.Getenv("BETA_INTAKE_ENABLED") != "true" || len(invitation) < 24 {
+			writeError(w, 503, "intake_unavailable", "Private reporting is not open yet")
 			return
 		}
-		returnSecretHash = string(hashBytes)
+		if subtle.ConstantTimeCompare([]byte(req.InvitationCode), []byte(invitation)) != 1 {
+			writeError(w, 403, "invitation_required", "Enter the invitation from your support organization")
+			return
+		}
+		if req.EntryPointID == "" {
+			req.EntryPointID = os.Getenv("BETA_ENTRY_POINT_ID")
+		}
+		if req.EntryPointID == "" {
+			writeError(w, 503, "route_unavailable", "No support organization is configured")
+			return
+		}
 	}
 
 	// Validate entry point if provided
@@ -100,7 +104,7 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	if req.EntryPointID != "" {
 		var count int
 		if err := h.pool.QueryRow(r.Context(),
-			`SELECT COUNT(*) FROM entry_points WHERE id = $1 AND active = TRUE AND revoked_at IS NULL`,
+			`SELECT COUNT(*) FROM entry_points ep JOIN organizations o ON o.id=ep.organization_id WHERE ep.id = $1 AND ep.active = TRUE AND ep.revoked_at IS NULL AND o.active=TRUE`,
 			req.EntryPointID).Scan(&count); err != nil || count == 0 {
 			writeError(w, http.StatusBadRequest, "invalid_entry_point", "Entry point not found or revoked")
 			return
@@ -110,9 +114,9 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 
 	// Persist session
 	_, err := h.pool.Exec(r.Context(), `
-		INSERT INTO private_sessions (id, entry_point_id, mode, language, token_jti, return_secret_hash, expires_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-	`, sessionID, entryPointID, req.Mode, req.Language, jti, nullableString(returnSecretHash), expiresAt)
+		INSERT INTO private_sessions (id, entry_point_id, mode, language, token_jti, return_code_digest, expires_at, return_expires_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, NOW() + INTERVAL '30 days')
+	`, sessionID, entryPointID, req.Mode, req.Language, jti, nullableString(returnDigest), expiresAt)
 	if err != nil {
 		log.Error().Err(err).Msg("failed to persist session")
 		writeError(w, http.StatusInternalServerError, "db_error", "Could not create session")
@@ -131,8 +135,9 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 		"session_token": tokenStr,
 		"expires_at":    expiresAt,
 	}
-	if len(returnWords) > 0 {
-		resp["return_secret_words"] = returnWords
+	if returnCode != "" {
+		resp["return_code"] = returnCode
+		resp["return_expires_at"] = time.Now().Add(30 * 24 * time.Hour)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -157,8 +162,8 @@ func (h *Handler) HandleEnd(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result, err := h.pool.Exec(r.Context(),
-		`UPDATE private_sessions SET revoked_at = NOW() WHERE id = $1 AND revoked_at IS NULL`,
-		sessionID)
+		`UPDATE private_sessions SET revoked_at = NOW() WHERE id = $1 AND token_jti=$2 AND revoked_at IS NULL`,
+		sessionID, claims.ID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "db_error", "Could not end session")
 		return
@@ -174,91 +179,56 @@ func (h *Handler) HandleEnd(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// HandleReturnAccess validates BIP-39 words and returns a new session token for case access.
-// Rate-limited: after maxAccessAttempts, the session is locked.
+// HandleReturnAccess uses one indexed lookup; guesses never mutate other reports.
+// Returning rotates the active token, restores its TTL and preserves a fixed return deadline.
 func (h *Handler) HandleReturnAccess(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 4096)
 	var req struct {
-		Words []string `json:"words"`
+		Code string `json:"return_code"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || len(req.Words) != 4 {
-		writeError(w, http.StatusBadRequest, "invalid_request", "Exactly 4 words required")
+	if json.NewDecoder(r.Body).Decode(&req) != nil {
+		writeError(w, 400, "invalid_request", "Enter your return code")
 		return
 	}
-
-	phrase := strings.Join(req.Words, " ")
-
-	// Find sessions with a return secret that haven't exceeded attempt limit
-	rows, err := h.pool.Query(r.Context(), `
-		SELECT id, return_secret_hash, case_id, access_attempt_count
-		FROM private_sessions
-		WHERE mode = 'with_return_access'
-		  AND return_secret_hash IS NOT NULL
-		  AND revoked_at IS NULL
-		  AND access_attempt_count < $1
-	`, maxAccessAttempts)
+	code := strings.ToLower(strings.Join(strings.Fields(req.Code), ""))
+	code = strings.ReplaceAll(code, "-", "")
+	raw, err := hex.DecodeString(code)
+	if err != nil || len(raw) != 32 {
+		writeError(w, 401, "invalid_code", "Return code is invalid or expired")
+		return
+	}
+	tx, err := h.pool.Begin(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "db_error", "")
+		writeError(w, 503, "db_error", "Try again later")
 		return
 	}
-	defer rows.Close()
-
-	// Compare against all eligible sessions (constant-time per session)
-	type candidate struct {
-		id           string
-		hash         string
-		caseID       *string
-		attemptCount int
-	}
-	var candidates []candidate
-	for rows.Next() {
-		var c candidate
-		if err := rows.Scan(&c.id, &c.hash, &c.caseID, &c.attemptCount); err != nil {
-			continue
-		}
-		candidates = append(candidates, c)
-	}
-
-	var matched *candidate
-	for i := range candidates {
-		if err := bcrypt.CompareHashAndPassword([]byte(candidates[i].hash), []byte(phrase)); err == nil {
-			matched = &candidates[i]
-			break
-		}
-		// Increment attempt count for any checked candidate (mild brute-force signal)
-		// Only increment for the one we're checking, but in practice we check all.
-	}
-
-	if matched == nil {
-		// Increment attempt count on all candidates to make enumeration harder
-		_, _ = h.pool.Exec(r.Context(),
-			`UPDATE private_sessions SET access_attempt_count = access_attempt_count + 1
-			 WHERE mode = 'with_return_access' AND revoked_at IS NULL AND access_attempt_count < $1`,
-			maxAccessAttempts)
-		writeError(w, http.StatusUnauthorized, "invalid_secret", "Invalid return words")
-		return
-	}
-
-	if matched.caseID == nil {
-		writeError(w, http.StatusNotFound, "no_case", "No submitted case found for this secret")
-		return
-	}
-
-	// Issue a new short-lived session token for case access
-	jti := uuid.New()
-	expiresAt := time.Now().Add(sessionTTL)
-	tokenStr, err := issueSessionJWTWithCase(h.cfg.SessionSecret, matched.id, jti.String(), *matched.caseID, expiresAt)
+	defer tx.Rollback(r.Context())
+	var sessionID, caseID string
+	err = tx.QueryRow(r.Context(), `SELECT id,case_id FROM private_sessions WHERE return_code_digest=$1 AND mode='with_return_access' AND case_id IS NOT NULL AND return_expires_at>NOW() FOR UPDATE`, digestCode(code)).Scan(&sessionID, &caseID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "token_error", "Could not issue token")
+		writeError(w, 401, "invalid_code", "Return code is invalid or expired")
 		return
 	}
-
-	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"session_token": tokenStr,
-		"case_id":       *matched.caseID,
-		"session_id":    matched.id,
-		"expires_at":    expiresAt,
-	})
+	jti := uuid.New().String()
+	expires := time.Now().Add(sessionTTL)
+	token, err := issueSessionJWTWithCase(h.cfg.SessionSecret, sessionID, jti, caseID, expires)
+	if err != nil {
+		writeError(w, 503, "token_error", "Try again later")
+		return
+	}
+	if _, err = tx.Exec(r.Context(), `UPDATE private_sessions SET token_jti=$2,expires_at=$3,revoked_at=NULL WHERE id=$1`, sessionID, jti, expires); err != nil {
+		writeError(w, 503, "db_error", "Try again later")
+		return
+	}
+	if tx.Commit(r.Context()) != nil {
+		writeError(w, 503, "db_error", "Try again later")
+		return
+	}
+	writeJSON(w, 200, map[string]interface{}{"session_token": token, "session_id": sessionID, "case_id": caseID, "expires_at": expires})
+}
+func digestCode(code string) string {
+	sum := sha256.Sum256([]byte(code))
+	return hex.EncodeToString(sum[:])
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -307,42 +277,4 @@ func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
-}
-
-// generateMnemonic generates a cryptographically random BIP-39 mnemonic of wordCount words.
-func generateMnemonic(wordCount int) ([]string, error) {
-	words := make([]string, wordCount)
-	wordlistLen := big.NewInt(int64(len(bip39Wordlist)))
-
-	for i := 0; i < wordCount; i++ {
-		idx, err := rand.Int(rand.Reader, wordlistLen)
-		if err != nil {
-			return nil, fmt.Errorf("crypto/rand failed: %w", err)
-		}
-		words[i] = bip39Wordlist[idx.Int64()]
-	}
-	return words, nil
-}
-
-// validateMnemonicWords returns true if all words are in the BIP-39 wordlist.
-func validateMnemonicWords(words []string) bool {
-	set := make(map[string]struct{}, len(bip39Wordlist))
-	for _, w := range bip39Wordlist {
-		set[w] = struct{}{}
-	}
-	for _, w := range words {
-		if _, ok := set[strings.ToLower(w)]; !ok {
-			return false
-		}
-	}
-	return true
-}
-
-// Context-safe request-id extraction
-func requestID(ctx context.Context) string {
-	// chi middleware.RequestID stores under "requestID" key
-	if id, ok := ctx.Value("requestID").(string); ok {
-		return id
-	}
-	return ""
 }
