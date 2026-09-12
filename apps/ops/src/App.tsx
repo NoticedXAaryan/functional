@@ -15,6 +15,7 @@ interface CaseRow {
 }
 
 const getCaseId = (c: CaseRow | null | undefined): string => c?.case_id || c?.id || '';
+const friendlyLabel = (value: string) => ({ ask_for_help: 'Help request', worried_about_someone: 'Concern for someone', missing_child: 'Missing child', alert_preparer: 'Alert preparer', alert_approver: 'Alert approver', school_implicated: 'School involved', caregiver_implicated: 'Caregiver involved', staff_implicated: 'Staff involved' }[value] ?? value.toLowerCase().replaceAll('_', ' '));
 
 interface Assignment {
   id: string;
@@ -239,8 +240,9 @@ function App() {
       <header className="ops-header">
         <div className="ops-brand">
           <span className="ops-brand-icon">🛡️</span>
-          <span className="ops-brand-name">Bal Suraksha <span className="ops-badge-ops">OPS</span></span>
+          <span className="ops-brand-name">Bal Suraksha <span className="ops-badge-ops">Staff</span></span>
         </div>
+        <nav className="ops-workspaces" aria-label="Other spaces"><a href={import.meta.env.VITE_PUBLIC_URL ?? 'http://localhost:5173'}>Public home</a><a href={`${import.meta.env.VITE_PUBLIC_URL ?? 'http://localhost:5173'}/alerts`}>Local alerts</a></nav>
         {staff && (
           <nav className="ops-nav">
             <button className={`ops-nav-btn${screen === 'cases' || screen === 'case_detail' ? ' active' : ''}`}
@@ -292,7 +294,7 @@ function App() {
         {/* ── CASE QUEUE ── */}
         {screen === 'cases' && (
           <div>
-            <aside className="ops-help"><strong>Your workspace</strong><p>Open a case to see its assignment and messages. To prepare a public missing-child alert, open Alert Review. A different authorized staff member must approve it before publication.</p><p>Signed in as {staff?.role}. An empty assignment means nobody has accepted responsibility yet. This prototype does not provide a staffed response service.</p></aside>
+            <aside className="ops-help"><strong>Your workspace · {friendlyLabel(staff?.role ?? '')}</strong><p>Choose a report to see its messages and assigned responder.</p><details><summary>How do alerts and assignments work?</summary><p>Prepare missing-child alerts in Alert Review. A different authorized staff member must approve publication. An empty assignment means nobody has accepted responsibility yet. A staffed response service is not connected.</p></details></aside>
             <div className="ops-page-header">
               <h2 className="ops-title">Case Queue</h2>
               <button className="ops-btn-secondary" onClick={fetchCases} disabled={loading}>
@@ -310,10 +312,10 @@ function App() {
                     <div className="ops-case-meta">
                       <span className="ops-case-id">{cid ? cid.slice(0, 8) : 'case'}…</span>
                       <span className="ops-badge" style={{ background: statusColor(c.status) }}>{c.status}</span>
-                      {c.conflict_flag && <span className="ops-badge ops-badge-warn">⚠️ {c.conflict_flag}</span>}
+                      {c.conflict_flag && <span className="ops-badge ops-badge-warn">⚠️ {friendlyLabel(c.conflict_flag)}</span>}
                     </div>
                     <div className="ops-case-sub">
-                      <span>{c.route_type}</span>
+                      <span>{friendlyLabel(c.route_type)}</span>
                       <span className="ops-muted">{c.created_at ? new Date(c.created_at).toLocaleString() : ''}</span>
                     </div>
                   </div>
@@ -333,7 +335,7 @@ function App() {
               <div className="ops-detail-header">
                 <div>
                   <h2 className="ops-title">Case {getCaseId(selectedCase).slice(0, 8)}…</h2>
-                  <p className="ops-subtitle">{selectedCase.route_type}</p>
+                  <p className="ops-subtitle">{friendlyLabel(selectedCase.route_type)}</p>
                 </div>
                 <span className="ops-badge" style={{ background: statusColor(selectedCase.status) }}>
                   {selectedCase.status}

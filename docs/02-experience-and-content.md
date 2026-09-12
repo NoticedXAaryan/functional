@@ -1,4 +1,7 @@
 # Experience and content
+
+## Current visual direction
+Use light surfaces, soft green/blue/lavender/peach sections, dark readable text and solid buttons. No neon accents, glow effects or glass styling. The home screen asks “What would you like to do?” and presents four actions. At phone widths, cards stack and navigation uses two columns. Use plain action labels and explain disabled features in context. Keep necessary preview notices short; do not hide actual service limitations.
 ## Navigation
 Public home offers Ask for help, Is this okay?, Check a report and Savera Alert. Assessment is optional. Receipt appears after successful submission. Community notification controls belong to the community journey; do not request notification permission during private intake.
 

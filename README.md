@@ -2,6 +2,8 @@
 
 A child-safety prototype with three connected spaces: **private help**, **a staff workspace**, and **local community alerts**.
 
+The interface uses a light colour palette, four clear home choices, and layouts that adapt to phone screens. Each workspace links to the others. Notification setup stays hidden when the service is switched off. For hosted deployments, set `VITE_OPS_URL` in the public app and `VITE_PUBLIC_URL` in the staff app to the corresponding frontend addresses; local defaults are ports 5174 and 5173.
+
 **Current status:** a functioning synthetic demonstration, with important gaps before real-world use. The public app is not an emergency dispatch service. Use fictional reports and invited adult testers. [Read the audit and completion plan](docs/13-system-audit-and-completion-plan.md).
 
 ## Which screen do I open?

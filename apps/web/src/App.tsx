@@ -296,16 +296,17 @@ function App() {
       {/* ── Top Bar ── */}
       <header className="top-bar">
         <div className="brand">
-          <div className="brand-icon">🛡️</div>
+          <div className="brand-icon" aria-hidden="true">✿</div>
           <div>
             <div className="brand-title">Bal Suraksha</div>
             <div style={{ fontSize: '11px', color: 'var(--accent-cyan)', letterSpacing: '0.5px' }}>
-              A PRIVATE PLACE TO ASK FOR HELP
+              Private reports and local alerts
             </div>
           </div>
         </div>
+        <nav className="workspace-links" aria-label="Other spaces"><a href="/alerts">Local alerts</a><a href={import.meta.env.VITE_OPS_URL ?? 'http://localhost:5174'}>Staff sign in</a></nav>
         <button className="btn-danger" onClick={handleQuickExit} title="Leave this page. Browser history is not erased.">
-          <span>⚡ QUICK EXIT</span>
+          <span>Quick exit ↗</span>
         </button>
       </header>
 
@@ -352,63 +353,41 @@ function App() {
 
       {/* ── Error Banner ── */}
       {errorMsg && (
-        <div className="glass-panel" style={{ padding: '12px 16px', marginBottom: '20px', borderColor: 'var(--accent-rose)', color: 'var(--accent-rose)' }}>
+        <div role="alert" className="glass-panel" style={{ padding: '12px 16px', marginBottom: '20px', borderColor: 'var(--accent-rose)', color: 'var(--accent-rose)' }}>
           ⚠️ {errorMsg}
         </div>
       )}
 
       {/* ── TAB 1: QR LANDING ── */}
       {activeTab === 'scan' && (
-        <main className="glass-panel" style={{ padding: '36px 28px', textAlign: 'center' }}>
-          <div className="badge badge-cyan" style={{ marginBottom: '16px' }}>
-            PRIVATE INTAKE ACCESS POINT
+        <main className="glass-panel welcome">
+          <p className="welcome-kicker">Help for children and young people</p>
+          <h1>What would you like to do?</h1>
+          <p className="welcome-lead">Send a private report, check a report you already sent, or read missing-child alerts in your area.</p>
+          <div className="choice-grid">
+            <button className="choice choice-help" disabled={loading} onClick={() => session ? setActiveTab('intake') : void handleStartSession('intake')}>
+              <strong>Ask for help</strong><span>For yourself, someone you care about, or a missing child.</span><em>{loading ? 'Opening…' : 'Start a private report →'}</em>
+            </button>
+            <button className="choice choice-understand" disabled={loading} onClick={() => session ? setActiveTab('assessment') : void handleStartSession('assessment')}>
+              <strong>Is this okay?</strong><span>See an example of guidance about bullying or uncomfortable messages.</span><em>See example guidance →</em>
+            </button>
+            <button className="choice choice-return" onClick={() => setActiveTab('return')}>
+              <strong>Check your report</strong><span>Already sent a report? Enter the four words you received to check for replies.</span><em>Open your report →</em>
+            </button>
+            <a className="choice choice-alerts" href="/alerts"><strong>Local alerts</strong><span>Read Savera alerts for your area and share a private tip.</span><em>View community alerts →</em></a>
           </div>
-          <h1 className="section-title">You can start with a small step.</h1>
-          <p className="section-desc" style={{ maxWidth: '560px', margin: '0 auto 28px' }}>
-            Ask for help without creating an account. A submitted report is retained for the support team. Quick exit does not erase browser history or copies saved by your device.
-          </p>
-
-          <div style={{ background: 'rgba(15,23,42,0.8)', border: '1px dashed var(--border-highlight)', borderRadius: 'var(--radius-md)', padding: '24px', maxWidth: '340px', margin: '0 auto 28px' }}>
-            <div style={{ fontSize: '48px', marginBottom: '8px' }}>📱</div>
-            <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>Demo entry point</div>
-            <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Fictional placement. A real venue has not been verified here.</div>
-          </div>
-
-          <div className="form-group" style={{ maxWidth: '340px', margin: '0 auto 24px' }}>
-            <label className="form-label">Preferred support language (screens are currently in English)</label>
-            <select
-              className="glass-input"
-              value={language}
-              onChange={(e) => setLanguage(e.target.value)}
-            >
-              <option value="en">English</option>
-              <option value="hi">हिंदी (Hindi)</option>
-              <option value="mr">मराठी (Marathi)</option>
-              <option value="ta">தமிழ் (Tamil)</option>
+          <div className="form-group">
+            <label htmlFor="support-language" className="form-label">Preferred support language</label>
+            <select id="support-language" className="glass-input" value={language} onChange={e => setLanguage(e.target.value)} style={{ maxWidth: 300 }}>
+              <option value="en">English</option><option value="hi">हिंदी (Hindi)</option><option value="mr">मराठी (Marathi)</option><option value="ta">தமிழ் (Tamil)</option>
             </select>
+            <small>Screens are currently in English.</small>
           </div>
-
-          <div className="start-actions">
-            <button className="btn-primary" onClick={() => handleStartSession('intake')} disabled={loading}>
-              {loading ? 'Starting...' : 'Ask for help →'}
-            </button>
-            <button className="btn-tab" style={{ padding: '12px 20px', background: 'rgba(6, 182, 212, 0.15)', border: '1px solid var(--accent-cyan)', color: 'var(--accent-cyan)', borderRadius: 'var(--radius-md)', fontWeight: 600, cursor: 'pointer' }} onClick={() => handleStartSession('assessment')} disabled={loading}>
-              Explore "Is this okay?"
-            </button>
-          </div>
-          <div className="start-links">
-            <button type="button" onClick={() => setActiveTab('return')}>Already have a return code? Check your report →</button>
-            <a href="/alerts">Savera Alert · View local alerts and notification settings →</a>
-          </div>
-          <details className="getting-started">
-            <summary>New here? How this works</summary>
-            <ol>
-              <li>Choose “Ask for help” and describe a fictional situation. No account is needed.</li>
-              <li>Review your report, then submit it. A receipt confirms it was saved; it does not mean a person has read it.</li>
-              <li>Keep your return words somewhere private if you want to check for a reply. Return access is still a demo feature.</li>
-            </ol>
-            <p>This build is for fictional demonstrations. QR venue verification, a staffed response service and full translations are not ready. “Is this okay?” uses simulated guidance.</p>
+          <details className="getting-started"><summary>How does a private report work?</summary>
+            <ol><li>Describe what happened. You do not need an account.</li><li>Review and send it. Your receipt confirms the report was saved.</li><li>Keep your return words privately to check for replies.</li></ol>
+            <p>Quick exit leaves the page. It does not erase browser history or a submitted report.</p>
           </details>
+          <p className="preview-note">Preview service · Use fictional details while response and privacy safeguards are being completed. Guidance is simulated.</p>
         </main>
       )}
 
@@ -416,7 +395,7 @@ function App() {
       {activeTab === 'assessment' && (
         <main className="glass-panel" style={{ padding: '32px 28px' }}>
           <div className="badge badge-cyan" style={{ marginBottom: '12px' }}>
-            DEMONSTRATION · SIMULATED GUIDANCE
+            Guidance preview · simulated
           </div>
           <h2 className="section-title">Is this situation okay?</h2>
           <p className="section-desc" style={{ marginBottom: '20px' }}>
@@ -425,6 +404,7 @@ function App() {
 
           <div className="form-group">
             <textarea
+              aria-label="Situation to explore"
               className="glass-input"
               rows={4}
               placeholder="Example: A teacher asked me to stay back alone after class and take pictures without telling my parents..."
@@ -442,15 +422,15 @@ function App() {
 
           {/* AI Result Presentation */}
           {aiResult && (
-            <div style={{ background: 'rgba(15, 23, 42, 0.9)', border: '1px solid var(--accent-cyan)', borderRadius: 'var(--radius-md)', padding: '24px', textAlign: 'left' }}>
+            <div style={{ background: '#f0f4f9', border: '1px solid var(--accent-cyan)', borderRadius: 'var(--radius-md)', padding: '24px', textAlign: 'left' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-                <span className="badge badge-emerald">HUMAN HELP PATH ALWAYS AVAILABLE</span>
-                {aiResult.is_simulated && <span className="badge badge-amber">SIMULATED ADAPTER</span>}
+                <span className="badge badge-emerald">You can also send a report</span>
+                {aiResult.is_simulated && <span className="badge badge-amber">Example response</span>}
               </div>
 
               {aiResult.observed_behaviors && aiResult.observed_behaviors.length > 0 && (
                 <div style={{ marginBottom: '16px' }}>
-                  <div style={{ fontSize: '12px', color: 'var(--accent-cyan)', fontWeight: 700, marginBottom: '6px' }}>OBSERVED BEHAVIORS</div>
+                  <div style={{ fontSize: '12px', color: 'var(--accent-cyan)', fontWeight: 700, marginBottom: '6px' }}>What the example highlights</div>
                   <ul style={{ paddingLeft: '20px', fontSize: '14px', color: 'var(--text-primary)' }}>
                     {aiResult.observed_behaviors.map((item, idx) => (
                       <li key={idx} style={{ marginBottom: '4px' }}>{item}</li>
@@ -467,7 +447,7 @@ function App() {
 
               {aiResult.suggested_options && (
                 <div style={{ marginBottom: '20px' }}>
-                  <div style={{ fontSize: '12px', color: 'var(--accent-teal)', fontWeight: 700, marginBottom: '6px' }}>RECOMMENDED SAFE ACTIONS</div>
+                  <div style={{ fontSize: '12px', color: 'var(--accent-teal)', fontWeight: 700, marginBottom: '6px' }}>Possible next steps</div>
                   <ul style={{ paddingLeft: '20px', fontSize: '14px' }}>
                     {aiResult.suggested_options.map((opt, idx) => (
                       <li key={idx} style={{ marginBottom: '4px', fontWeight: 500 }}>{opt}</li>
@@ -489,12 +469,12 @@ function App() {
       {/* ── TAB 3: INTAKE FORM ── */}
       {activeTab === 'intake' && (
         <main className="glass-panel" style={{ padding: '32px 28px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <div className="form-heading" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
             <div>
-              <h2 className="section-title">Confidential Support Request</h2>
+              <h2 className="section-title">Ask for help</h2>
               <p className="section-desc" style={{ margin: 0 }}>Use fictional details in this demo. Submitting saves your report for the support team.</p>
             </div>
-            <span className="badge badge-emerald">SESSION ACTIVE</span>
+            <span className="badge badge-emerald">Report open</span>
           </div>
 
           <div className="form-group">
@@ -527,8 +507,9 @@ function App() {
           </div>
 
           <div className="form-group">
-            <label className="form-label">Describe what happened or what help is needed *</label>
+            <label htmlFor="report-details" className="form-label">Describe what happened or what help is needed *</label>
             <textarea
+              id="report-details"
               className="glass-input"
               rows={5}
               placeholder="Tell us as much or as little as you feel comfortable sharing..."
@@ -538,8 +519,9 @@ function App() {
           </div>
 
           <div className="form-group">
-            <label className="form-label">Are any local authorities or institutions involved?</label>
+            <label htmlFor="report-conflict" className="form-label">Are any local authorities or institutions involved?</label>
             <select
+              id="report-conflict"
               className="glass-input"
               value={conflictFlag}
               onChange={(e) => setConflictFlag(e.target.value)}
@@ -554,8 +536,9 @@ function App() {
           <p className="section-desc">Contact preferences below demonstrate the planned flow. They are not yet enforced by the service; use fictional details only.</p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }} className="form-group">
             <div>
-              <label className="form-label">Preferred Channel</label>
+              <label htmlFor="contact-channel" className="form-label">How would you like to hear from us?</label>
               <select
+                id="contact-channel"
                 className="glass-input"
                 value={preferredChannel}
                 onChange={(e) => setPreferredChannel(e.target.value as any)}
@@ -568,6 +551,7 @@ function App() {
               <label className="form-label">Safe Contact Hours</label>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                 <input
+                  aria-label="Safe contact start time"
                   type="time"
                   className="glass-input"
                   value={safeHoursStart}
@@ -575,6 +559,7 @@ function App() {
                 />
                 <span>to</span>
                 <input
+                  aria-label="Safe contact end time"
                   type="time"
                   className="glass-input"
                   value={safeHoursEnd}
@@ -586,27 +571,27 @@ function App() {
 
           <div style={{ textAlign: 'right', marginTop: '28px' }}>
             <button className="btn-primary" onClick={() => setShowPreview(true)} disabled={!accountText.trim()}>
-              Preview & Submit →
+              Review my report →
             </button>
           </div>
 
           {showPreview && (
             <div className="modal-overlay">
               <div className="modal-card">
-                <h3 style={{ marginBottom: '12px' }}>Review Your Information</h3>
-                <div style={{ background: 'rgba(15,23,42,0.6)', padding: '14px', borderRadius: 'var(--radius-md)', marginBottom: '16px' }}>
-                  <div style={{ fontSize: '12px', color: 'var(--accent-cyan)', fontWeight: 600 }}>ROUTE TYPE</div>
+                <h3 style={{ marginBottom: '12px' }}>Review your report</h3>
+                <div style={{ background: '#f0f4f9', padding: '14px', borderRadius: 'var(--radius-md)', marginBottom: '16px' }}>
+                  <div style={{ fontSize: '12px', color: 'var(--accent-cyan)', fontWeight: 600 }}>What this report is about</div>
                   <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>{routeType}</div>
-                  <div style={{ fontSize: '12px', color: 'var(--accent-cyan)', fontWeight: 600 }}>NARRATIVE</div>
+                  <div style={{ fontSize: '12px', color: 'var(--accent-cyan)', fontWeight: 600 }}>Your message</div>
                   <div style={{ fontSize: '14px', color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>{accountText}</div>
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-                  <button className="btn-tab" style={{ padding: '8px 16px', background: 'transparent', border: '1px solid var(--border-color)', color: 'white', borderRadius: 'var(--radius-md)', cursor: 'pointer' }} onClick={() => setShowPreview(false)}>
-                    Edit Form
+                  <button className="btn-tab" style={{ padding: '8px 16px', background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-primary)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }} onClick={() => setShowPreview(false)}>
+                    Keep editing
                   </button>
                   <button className="btn-primary" onClick={handleSubmitCase} disabled={loading}>
-                    {loading ? 'Submitting...' : 'Confirm & Submit Case'}
+                    {loading ? 'Submitting...' : 'Send report'}
                   </button>
                 </div>
               </div>
@@ -621,17 +606,17 @@ function App() {
           <div className="badge badge-emerald" style={{ marginBottom: '16px' }}>
             ✓ REPORT RECEIVED
           </div>
-          <h2 className="section-title">Intake Receipt</h2>
+          <h2 className="section-title">Your report is saved</h2>
           <p className="section-desc" style={{ maxWidth: '560px', margin: '0 auto 20px' }}>
             Your report has been received. This does not mean a responder has accepted it yet.
           </p>
 
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', marginBottom: '24px' }}>
-            <div style={{ background: 'rgba(15,23,42,0.7)', border: '1px solid var(--border-color)', padding: '12px 20px', borderRadius: 'var(--radius-md)' }}>
+          <div className="receipt-meta" style={{ display: 'flex', justifyContent: 'center', gap: '20px', marginBottom: '24px' }}>
+            <div style={{ background: '#f0f4f9', border: '1px solid var(--border-color)', padding: '12px 20px', borderRadius: 'var(--radius-md)' }}>
               <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>RECEIPT ID</div>
               <div style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--accent-cyan)' }}>{receipt.receipt_id}</div>
             </div>
-            <div style={{ background: 'rgba(15,23,42,0.7)', border: '1px solid var(--border-color)', padding: '12px 20px', borderRadius: 'var(--radius-md)' }}>
+            <div style={{ background: '#f0f4f9', border: '1px solid var(--border-color)', padding: '12px 20px', borderRadius: 'var(--radius-md)' }}>
               <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>STATUS</div>
               <div style={{ fontWeight: 700, color: 'var(--accent-emerald)' }}>{receipt.status}</div>
             </div>
@@ -640,7 +625,7 @@ function App() {
           {session?.return_secret_words && (
             <div style={{ background: 'rgba(6, 182, 212, 0.05)', border: '1px solid var(--accent-cyan)', padding: '24px', borderRadius: 'var(--radius-lg)', margin: '0 auto 28px', maxWidth: '640px' }}>
               <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--accent-cyan)', marginBottom: '4px' }}>
-                🔑 YOUR 4-WORD RETURN SECRET
+                🔑 Your four return words
               </div>
               <div className="mnemonic-grid">
                 {session.return_secret_words.map((word, idx) => (
@@ -654,7 +639,7 @@ function App() {
           )}
 
           <button className="btn-primary" onClick={() => setActiveTab('return')}>
-            Go to Return Access Portal →
+            Check your report →
           </button>
         </main>
       )}
@@ -662,7 +647,7 @@ function App() {
       {/* ── TAB 5: RETURN ACCESS ── */}
       {activeTab === 'return' && (
         <main className="glass-panel" style={{ padding: '32px 28px' }}>
-          <h2 className="section-title" style={{ textAlign: 'center' }}>Return Access Portal</h2>
+          <h2 className="section-title" style={{ textAlign: 'center' }}>Check your report</h2>
           {!returnCaseView ? (
             <form onSubmit={handleReturnAccess} style={{ maxWidth: '580px', margin: '0 auto' }}>
               <div className="secret-input-grid">
@@ -671,6 +656,7 @@ function App() {
                     key={idx}
                     type="text"
                     className="glass-input secret-word-input"
+                    aria-label={`Return word ${idx + 1}`}
                     placeholder={`Word #${idx + 1}`}
                     value={returnSecretWords[idx]}
                     onChange={(e) => {
@@ -683,13 +669,13 @@ function App() {
               </div>
               <div style={{ textAlign: 'center', marginTop: '20px' }}>
                 <button type="submit" className="btn-primary" disabled={loading}>
-                  {loading ? 'Validating Secret...' : 'Access My Case →'}
+                  {loading ? 'Opening…' : 'Open my report →'}
                 </button>
               </div>
             </form>
           ) : (
             <div style={{ maxWidth: '680px', margin: '0 auto' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(15,23,42,0.8)', padding: '16px 20px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-highlight)', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f0f4f9', padding: '16px 20px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-highlight)', marginBottom: '20px' }}>
                 <div>
                   <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>CASE ID</div>
                   <div style={{ fontFamily: 'monospace', fontWeight: 600 }}>{returnCaseView.case_id}</div>
