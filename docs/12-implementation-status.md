@@ -1,5 +1,7 @@
 # Implementation status — 11 September 2026
 
+> Historical snapshot. The current implementation, evidence and remaining blockers are in [the 12 September audit](13-system-audit-and-completion-plan.md). The Docker and delivery findings below describe the earlier version.
+
 This update follows the repository's `16c8665` prototype. The PRD describes intended behavior; existing code and checked boxes are not evidence that a phase has passed.
 
 ## Changes in this update

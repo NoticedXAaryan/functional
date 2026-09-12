@@ -5,6 +5,17 @@
   padding: 24px 20px 60px;
 }
 
+.start-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 12px; }
+.start-links { display: grid; gap: 12px; margin: 28px auto 0; max-width: 580px; }
+.start-links a, .start-links button { font: inherit; color: #a5f3fc; background: #172b40; border: 1px solid #3d6279; padding: 16px; border-radius: 12px; text-decoration: none; cursor: pointer; text-align: left; }
+.getting-started { text-align: left; margin-top: 24px; padding: 18px; border: 1px solid #3d6279; border-radius: 12px; color: #cbd5e1; }
+.getting-started summary { cursor: pointer; color: #f8fafc; font-weight: 600; }
+.getting-started ol { padding-left: 22px; margin: 16px 0; }
+.getting-started li { margin-bottom: 10px; }
+button:focus-visible, a:focus-visible, summary:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px solid #f4b544; outline-offset: 3px; }
+@media (max-width: 640px) { .nav-tabs { flex-wrap: wrap; } .nav-tab { flex: 1 1 40%; } .top-bar { padding: 12px; gap: 10px; } .brand-title { font-size: 18px; } .start-actions > button { width: 100%; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
 .top-bar {
   display: flex;
   justify-content: space-between;

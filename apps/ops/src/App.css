@@ -233,3 +233,7 @@ body {
 /* ── Alert review ───────────────────────────────────────── */
 .ops-alert-body { font-size: 14px; line-height: 1.6; color: var(--text-primary); margin: 14px 0; background: rgba(255,255,255,0.03); padding: 12px; border-radius: var(--radius-sm); }
 .ops-alert-actions { display: flex; align-items: center; gap: 16px; }
+.ops-help { padding: 18px; margin-bottom: 24px; border: 1px solid #496378; border-radius: 12px; line-height: 1.7; }
+.ops-help p { margin-top: 10px; }
+.ops-help summary { cursor: pointer; font-weight: 600; }
+.ops-case-row:focus-visible, summary:focus-visible { outline: 3px solid #f4b544; outline-offset: 3px; }

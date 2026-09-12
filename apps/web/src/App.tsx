@@ -300,11 +300,11 @@ function App() {
           <div>
             <div className="brand-title">Bal Suraksha</div>
             <div style={{ fontSize: '11px', color: 'var(--accent-cyan)', letterSpacing: '0.5px' }}>
-              SAFE & ANONYMOUS CHILD INTAKE
+              A PRIVATE PLACE TO ASK FOR HELP
             </div>
           </div>
         </div>
-        <button className="btn-danger" onClick={handleQuickExit} title="Instantly clear session and exit">
+        <button className="btn-danger" onClick={handleQuickExit} title="Leave this page. Browser history is not erased.">
           <span>⚡ QUICK EXIT</span>
         </button>
       </header>
@@ -315,7 +315,7 @@ function App() {
           className={`nav-tab ${activeTab === 'scan' ? 'active' : ''}`}
           onClick={() => setActiveTab('scan')}
         >
-          1. QR Landing
+          Start here
         </button>
         <button
           className={`nav-tab ${activeTab === 'assessment' ? 'active' : ''}`}
@@ -324,7 +324,7 @@ function App() {
             else setActiveTab('assessment');
           }}
         >
-          2. AI Assessment ("Is this okay?")
+          Is this okay?
         </button>
         <button
           className={`nav-tab ${activeTab === 'intake' ? 'active' : ''}`}
@@ -333,20 +333,20 @@ function App() {
             else setActiveTab('intake');
           }}
         >
-          3. Safe Intake
+          Ask for help
         </button>
         <button
           className={`nav-tab ${activeTab === 'receipt' ? 'active' : ''}`}
           onClick={() => setActiveTab('receipt')}
           disabled={!receipt}
         >
-          4. Receipt
+          Your receipt
         </button>
         <button
           className={`nav-tab ${activeTab === 'return' ? 'active' : ''}`}
           onClick={() => setActiveTab('return')}
         >
-          5. Return Access
+          Check a report
         </button>
       </nav>
 
@@ -363,7 +363,7 @@ function App() {
           <div className="badge badge-cyan" style={{ marginBottom: '16px' }}>
             PRIVATE INTAKE ACCESS POINT
           </div>
-          <h1 className="section-title">Scan QR or Start Private Intake</h1>
+          <h1 className="section-title">You can start with a small step.</h1>
           <p className="section-desc" style={{ maxWidth: '560px', margin: '0 auto 28px' }}>
             Ask for help without creating an account. A submitted report is retained for the support team. Quick exit does not erase browser history or copies saved by your device.
           </p>
@@ -375,7 +375,7 @@ function App() {
           </div>
 
           <div className="form-group" style={{ maxWidth: '340px', margin: '0 auto 24px' }}>
-            <label className="form-label">Preferred Language</label>
+            <label className="form-label">Preferred support language (screens are currently in English)</label>
             <select
               className="glass-input"
               value={language}
@@ -388,14 +388,27 @@ function App() {
             </select>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '12px' }}>
+          <div className="start-actions">
             <button className="btn-primary" onClick={() => handleStartSession('intake')} disabled={loading}>
-              {loading ? 'Starting...' : 'Direct Intake Form →'}
+              {loading ? 'Starting...' : 'Ask for help →'}
             </button>
             <button className="btn-tab" style={{ padding: '12px 20px', background: 'rgba(6, 182, 212, 0.15)', border: '1px solid var(--accent-cyan)', color: 'var(--accent-cyan)', borderRadius: 'var(--radius-md)', fontWeight: 600, cursor: 'pointer' }} onClick={() => handleStartSession('assessment')} disabled={loading}>
-              🤖 Try "Is this okay?" AI Tool
+              Explore "Is this okay?"
             </button>
           </div>
+          <div className="start-links">
+            <button type="button" onClick={() => setActiveTab('return')}>Already have a return code? Check your report →</button>
+            <a href="/alerts">Savera Alert · View local alerts and notification settings →</a>
+          </div>
+          <details className="getting-started">
+            <summary>New here? How this works</summary>
+            <ol>
+              <li>Choose “Ask for help” and describe a fictional situation. No account is needed.</li>
+              <li>Review your report, then submit it. A receipt confirms it was saved; it does not mean a person has read it.</li>
+              <li>Keep your return words somewhere private if you want to check for a reply. Return access is still a demo feature.</li>
+            </ol>
+            <p>This build is for fictional demonstrations. QR venue verification, a staffed response service and full translations are not ready. “Is this okay?” uses simulated guidance.</p>
+          </details>
         </main>
       )}
 
@@ -403,11 +416,11 @@ function App() {
       {activeTab === 'assessment' && (
         <main className="glass-panel" style={{ padding: '32px 28px' }}>
           <div className="badge badge-cyan" style={{ marginBottom: '12px' }}>
-            BOUNDED AI HELP ASSISTANT
+            DEMONSTRATION · SIMULATED GUIDANCE
           </div>
           <h2 className="section-title">Is this situation okay?</h2>
           <p className="section-desc" style={{ marginBottom: '20px' }}>
-            Share what happened. Our private system will highlight key patterns and suggest safe next steps.
+            Try a fictional example to explore the guidance format. This demonstration cannot decide whether a real situation is safe. You can ask for help without using it.
           </p>
 
           <div className="form-group">
@@ -422,8 +435,9 @@ function App() {
 
           <div style={{ marginBottom: '24px' }}>
             <button className="btn-primary" onClick={handleRunAssessment} disabled={loading || !assessmentText.trim()}>
-              {loading ? 'Analyzing...' : 'Analyze My Situation'}
+              {loading ? 'Loading...' : 'Show example guidance'}
             </button>
+            <button className="nav-tab" onClick={() => setActiveTab('intake')}>Skip this and ask for help →</button>
           </div>
 
           {/* AI Result Presentation */}
@@ -464,7 +478,7 @@ function App() {
 
               <div style={{ textAlign: 'right', marginTop: '16px' }}>
                 <button className="btn-primary" onClick={handleUseAssessmentInReport}>
-                  Pre-fill into Official Intake Report →
+                  Use my words in a support request →
                 </button>
               </div>
             </div>
@@ -478,7 +492,7 @@ function App() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
             <div>
               <h2 className="section-title">Confidential Support Request</h2>
-              <p className="section-desc" style={{ margin: 0 }}>Describe your situation. All information is encrypted and safe.</p>
+              <p className="section-desc" style={{ margin: 0 }}>Use fictional details in this demo. Submitting saves your report for the support team.</p>
             </div>
             <span className="badge badge-emerald">SESSION ACTIVE</span>
           </div>
@@ -506,8 +520,8 @@ function App() {
                 className={`route-card ${routeType === 'missing_child' ? 'selected' : ''}`}
                 onClick={() => setRouteType('missing_child')}
               >
-                <div className="route-title">🚨 Missing child alert</div>
-                <div className="route-subtitle">Report a child who is missing or uncontactable.</div>
+                <div className="route-title">🚨 Report a missing child</div>
+                <div className="route-subtitle">Send a private report. Staff review is required before any public alert.</div>
               </div>
             </div>
           </div>
@@ -537,7 +551,8 @@ function App() {
             </select>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }} className="form-group">
+          <p className="section-desc">Contact preferences below demonstrate the planned flow. They are not yet enforced by the service; use fictional details only.</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }} className="form-group">
             <div>
               <label className="form-label">Preferred Channel</label>
               <select

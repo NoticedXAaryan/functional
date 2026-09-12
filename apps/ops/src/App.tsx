@@ -274,7 +274,7 @@ function App() {
                 void signInWithOrganization().catch(() => setErrorMsg('Organization sign-in is unavailable. Please try again.'));
               }}>Sign in with organization</button>
             )}
-            {authMode === 'demo' && <p className="ops-subtitle">Demo accounts · fictional cases only</p>}
+            {authMode === 'demo' && <details className="ops-help"><summary>Trying the demo? Start here</summary><p>Use preparer.demo to prepare an alert, then sign out and use approver.demo to approve and publish it. Both use the local demo password: demo-password. These accounts are only for fictional local data.</p><p>First create a missing-child report in the public application. It will appear in this organization's case queue.</p></details>}
             {authMode === 'demo' && <form onSubmit={handleLogin} className="ops-form">
               <label htmlFor="username" className="ops-label">Username</label>
               <input id="username" type="text" className="ops-input" value={username}
@@ -292,6 +292,7 @@ function App() {
         {/* ── CASE QUEUE ── */}
         {screen === 'cases' && (
           <div>
+            <aside className="ops-help"><strong>Your workspace</strong><p>Open a case to see its assignment and messages. To prepare a public missing-child alert, open Alert Review. A different authorized staff member must approve it before publication.</p><p>Signed in as {staff?.role}. An empty assignment means nobody has accepted responsibility yet. This prototype does not provide a staffed response service.</p></aside>
             <div className="ops-page-header">
               <h2 className="ops-title">Case Queue</h2>
               <button className="ops-btn-secondary" onClick={fetchCases} disabled={loading}>
@@ -299,13 +300,13 @@ function App() {
               </button>
             </div>
             {cases.length === 0 && !loading && (
-              <div className="ops-empty">No cases in queue for your organization.</div>
+              <div className="ops-empty">No reports yet. Submit a fictional report from the public app, then select Refresh. Reports from other organizations will not appear here.</div>
             )}
             <div className="ops-case-list">
               {cases.map(c => {
                 const cid = getCaseId(c);
                 return (
-                  <div key={cid || Math.random().toString()} className="ops-case-row" onClick={() => openCase(c)} id={`case-${cid}`}>
+                  <div key={cid} className="ops-case-row" role="button" tabIndex={0} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); void openCase(c); } }} onClick={() => openCase(c)} id={`case-${cid}`}>
                     <div className="ops-case-meta">
                       <span className="ops-case-id">{cid ? cid.slice(0, 8) : 'case'}…</span>
                       <span className="ops-badge" style={{ background: statusColor(c.status) }}>{c.status}</span>
