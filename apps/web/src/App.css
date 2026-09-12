@@ -299,3 +299,84 @@ button:focus-visible, a:focus-visible, summary:focus-visible, input:focus-visibl
   .form-heading { flex-wrap: wrap; gap: 12px; }
   .receipt-meta { flex-wrap: wrap; }
 }
+
+/*
+ * Bal Setu token layer — imported once in App.tsx as import './bs-tokens.css'
+ * The .bs-ui wrapper class (from bs-tokens.css) provides all token variables.
+ * ChildShell wraps the app in .bs-ui automatically via Primitives.tsx.
+ * Legacy .glass-panel, .glass-input, .btn-primary classes below are kept
+ * only so that any CommunityAlerts.tsx screens that still reference them
+ * continue to render until those screens are migrated to bs-ui classes.
+ */
+
+/* Legacy compat shims — migrated screens should use bs-ui classes instead */
+.glass-panel {
+  background: #ffffff;
+  border: 1px solid #dad5e2;
+  border-radius: 16px;
+  padding: 24px;
+  overflow-wrap: anywhere;
+}
+
+.glass-input {
+  display: block;
+  width: 100%;
+  min-height: 56px;
+  padding: 14px;
+  background: white;
+  border: 1.5px solid #827c91;
+  border-radius: 12px;
+  font: inherit;
+  color: #242238;
+}
+
+textarea.glass-input {
+  min-height: 140px;
+  resize: vertical;
+}
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 56px;
+  padding: 12px 20px;
+  background: #603b91;
+  color: white;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  font: 650 1rem/1 inherit;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.btn-primary:hover { background: #4c2b78; }
+.btn-primary:disabled { background: #e9e6ed; color: #595668; cursor: not-allowed; }
+
+.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 8px 16px;
+  background: white;
+  color: #a82d3c;
+  border: 2px solid #a82d3c;
+  border-radius: 12px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.btn-danger:hover { background: #fff0f2; }
+
+.badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.badge-emerald { background: #d1fae5; color: #065f46; }
+.badge-cyan    { background: #cffafe; color: #0e7490; }
+.badge-amber   { background: #fef3c7; color: #92400e; }
+
