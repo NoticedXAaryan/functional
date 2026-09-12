@@ -1,0 +1,45 @@
+# Render.com Infrastructure-as-Code Blueprint
+# Deploy both Go services from this monorepo.
+# Connect to Render Dashboard → Blueprints → New Blueprint → point at this repo.
+
+services:
+  # ── Go API server ─────────────────────────────────────────────────────
+  - type: web
+    name: balsuraksha-api
+    runtime: docker
+    dockerfilePath: infra/docker/api.Dockerfile
+    dockerContext: .
+    plan: free
+    envVars:
+      - key: APP_MODE
+        value: demo
+      - key: NOTIFICATION_MODE
+        value: DISABLED
+      - key: SESSION_SECRET
+        value: demo-only-signing-secret-change-before-real-use
+      - key: DATABASE_URL
+        sync: false  # Set manually after creating Neon DB
+      - key: MIGRATION_PATH
+        value: /app/db/migrations
+      - key: WEB_ORIGINS
+        sync: false  # Set to Vercel frontend URLs after deploying them
+      - key: AI_ENABLED
+        value: "false"
+      - key: STAFF_AUTH_MODE
+        value: demo
+    healthCheckPath: /healthz
+
+  # ── Go background worker ─────────────────────────────────────────────
+  - type: worker
+    name: balsuraksha-worker
+    runtime: docker
+    dockerfilePath: infra/docker/worker.Dockerfile
+    dockerContext: .
+    plan: free
+    envVars:
+      - key: APP_MODE
+        value: demo
+      - key: NOTIFICATION_MODE
+        value: DISABLED
+      - key: DATABASE_URL
+        sync: false  # Set manually after creating Neon DB
