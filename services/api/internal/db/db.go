@@ -4,6 +4,7 @@ package db
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
 )
@@ -65,10 +67,11 @@ func Connect(ctx context.Context, databaseURL string, migrationPath string) (*Po
 func (p *Pool) RunMigrations(migrationsPath string) error {
 	log.Info().Str("path", migrationsPath).Msg("running database migrations")
 
-	m, err := migrate.New(
-		migrateFileURL(migrationsPath),
-		p.Config().ConnString(),
-	)
+	source, err := iofs.New(os.DirFS(migrationsPath), ".")
+	if err != nil {
+		return fmt.Errorf("db: open migrations: %w", err)
+	}
+	m, err := migrate.NewWithSourceInstance("iofs", source, p.Config().ConnString())
 	if err != nil {
 		return fmt.Errorf("db: create migrator: %w", err)
 	}

@@ -179,8 +179,9 @@ func (h *StaffAuthHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	err := h.pool.QueryRow(r.Context(), `
 		SELECT sm.id, sm.organization_id, sm.password_hash, rg.role
 		FROM staff_members sm
-		JOIN role_grants rg ON rg.staff_id = sm.id AND rg.revoked_at IS NULL
+		JOIN role_grants rg ON rg.staff_id = sm.id AND rg.organization_id = sm.organization_id AND rg.revoked_at IS NULL
 		WHERE sm.username = $1 AND sm.active = TRUE
+		ORDER BY CASE rg.role WHEN 'admin' THEN 0 WHEN 'supervisor' THEN 1 WHEN 'alert_approver' THEN 2 WHEN 'alert_preparer' THEN 3 ELSE 4 END, rg.id
 		LIMIT 1
 	`, req.Username).Scan(&staffID, &orgID, &passwordHash, &role)
 	if err != nil {

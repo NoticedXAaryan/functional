@@ -127,6 +127,7 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := map[string]interface{}{
+		"session_id":    sessionID.String(),
 		"session_token": tokenStr,
 		"expires_at":    expiresAt,
 	}
@@ -255,6 +256,8 @@ func (h *Handler) HandleReturnAccess(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"session_token": tokenStr,
 		"case_id":       *matched.caseID,
+		"session_id":    matched.id,
+		"expires_at":    expiresAt,
 	})
 }
 

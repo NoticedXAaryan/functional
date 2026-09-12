@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import './App.css';
+import AlertConsole from './AlertConsole';
 import { API_BASE, initializeStaffAuth, signInWithOrganization, signOutOfOrganization, staffFetch as fetch } from './auth';
 import type { StaffClaims } from './auth';
 
@@ -30,16 +31,6 @@ interface Message {
   sender_type: string;
   is_staff_note: boolean;
   sent_at: string;
-}
-
-interface AlertDraft {
-  id: string;
-  alert_id: string;
-  status: string;
-  description_text: string;
-  issuer_name: string;
-  expiry_at: string;
-  prepared_by: string;
 }
 
 type Screen = 'login' | 'cases' | 'case_detail' | 'alerts';
@@ -78,8 +69,6 @@ function App() {
   const [newMessage, setNewMessage] = useState('');
   const [isStaffNote, setIsStaffNote] = useState(false);
 
-  // Alert review
-  const [alertDrafts, setAlertDrafts] = useState<AlertDraft[]>([]);
 
   const authHeaders = useCallback(() => ({
     'Content-Type': 'application/json',
@@ -121,7 +110,6 @@ function App() {
     setCases([]);
     setSelectedCase(null);
     setMessages([]);
-    setAlertDrafts([]);
     setScreen('login');
     if (authMode === 'oidc') {
       void signOutOfOrganization().catch(() => setErrorMsg('Signed out of this screen. Organization logout failed; close this tab and end your organization session.'));
@@ -224,51 +212,6 @@ function App() {
       });
       const mData = await mRes.json();
       setMessages(mData.messages || []);
-    } catch (err: any) {
-      setErrorMsg(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // ── Alert drafts ────────────────────────────────────────────────────────
-  const fetchAlertDrafts = useCallback(async () => {
-    if (!staff) return;
-    setLoading(true);
-    try {
-      // Approver role: list drafts in review
-      const res = await fetch(`${API_BASE}/staff/alert-approvals`, { headers: authHeaders() });
-      if (!res.ok) {
-        const text = await res.text();
-        let msg = 'Failed to load alerts';
-        try { msg = JSON.parse(text).error || msg; } catch {}
-        throw new Error(msg);
-      }
-      const data = await res.json();
-      setAlertDrafts(data.drafts || []);
-    } catch (err: any) {
-      setErrorMsg(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [staff, authHeaders]);
-
-  useEffect(() => {
-    if (screen === 'alerts' && staff) fetchAlertDrafts();
-  }, [screen, staff, fetchAlertDrafts]);
-
-  const handleApprove = async (revisionId: string) => {
-    setLoading(true);
-    setErrorMsg(null);
-    try {
-      const res = await fetch(`${API_BASE}/staff/alert-approvals`, {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify({ revision_id: revisionId, decision: 'approve' }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Approval failed');
-      fetchAlertDrafts();
     } catch (err: any) {
       setErrorMsg(err.message);
     } finally {
@@ -462,45 +405,8 @@ function App() {
           </div>
         )}
 
-        {/* ── ALERT REVIEW ── */}
-        {screen === 'alerts' && (
-          <div>
-            <div className="ops-page-header">
-              <h2 className="ops-title">Alert Review</h2>
-              <button className="ops-btn-secondary" onClick={fetchAlertDrafts} disabled={loading}>
-                {loading ? '…' : '↻ Refresh'}
-              </button>
-            </div>
-            <p className="ops-subtitle">
-              You are reviewing alert revisions. Approval is binding and immutable —
-              any field change after approval creates a new revision.
-            </p>
-            {alertDrafts.length === 0 && !loading && (
-              <div className="ops-empty">No alert revisions pending review.</div>
-            )}
-            {alertDrafts.map(d => (
-              <div key={d.id} className="ops-card ops-alert-card" id={`alert-revision-${d.id}`}>
-                <div className="ops-detail-header">
-                  <div>
-                    <h3 className="ops-title">{d.issuer_name}</h3>
-                    <span className="ops-badge">{d.status}</span>
-                  </div>
-                  <span className="ops-muted">Expires {new Date(d.expiry_at).toLocaleString()}</span>
-                </div>
-                <p className="ops-alert-body">{d.description_text}</p>
-                <div className="ops-alert-actions">
-                  <button id={`approve-${d.id}`} className="ops-btn-primary"
-                    onClick={() => handleApprove(d.id)} disabled={loading}>
-                    ✓ Approve Revision
-                  </button>
-                  <span className="ops-muted ops-note">
-                    Two-person rule: you cannot approve a revision you prepared.
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        {screen === 'alerts' && staff && <AlertConsole staff={staff} />}
+
       </main>
     </div>
   );

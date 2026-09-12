@@ -109,7 +109,7 @@ func TestT019_IncognitoSessionRevocation(t *testing.T) {
 		VALUES ($1, 'one_time', 'en', $2, NOW() + INTERVAL '15 minutes')
 	`, sessionID, tokenJTI)
 	if err != nil {
-		t.Skipf("T-019: seed session failed: %v", err)
+		t.Fatalf("T-019: seed session failed: %v", err)
 	}
 
 	_, err = env.pool.Exec(context.Background(), `
@@ -117,7 +117,7 @@ func TestT019_IncognitoSessionRevocation(t *testing.T) {
 		VALUES ($1, $2, 'RECEIVED', 'ask_for_help', '[SYNTHETIC TEST DATA]', $3, 1)
 	`, caseID, orgID, uuid.New().String())
 	if err != nil {
-		t.Skipf("T-019: seed case failed: %v", err)
+		t.Fatalf("T-019: seed case failed: %v", err)
 	}
 
 	sessionToken := makeSessionToken(t, env.cfg, sessionID, caseID)
@@ -162,14 +162,14 @@ func TestT020_CacheControlNoStore(t *testing.T) {
 		VALUES ($1, 'one_time', 'en', $2, NOW() + INTERVAL '15 minutes')
 	`, sessionID, tokenJTI)
 	if err != nil {
-		t.Skipf("T-020: seed session failed: %v", err)
+		t.Fatalf("T-020: seed session failed: %v", err)
 	}
 	_, err = env.pool.Exec(context.Background(), `
 		INSERT INTO cases (id, organization_id, status, route_type, account_text, idempotency_key, version)
 		VALUES ($1, $2, 'RECEIVED', 'ask_for_help', '[SYNTHETIC TEST DATA]', $3, 1)
 	`, caseID, orgID, uuid.New().String())
 	if err != nil {
-		t.Skipf("T-020: seed case failed: %v", err)
+		t.Fatalf("T-020: seed case failed: %v", err)
 	}
 
 	sessionToken := makeSessionToken(t, env.cfg, sessionID, caseID)

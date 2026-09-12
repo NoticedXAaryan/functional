@@ -1,7 +1,7 @@
 // Bal Suraksha background worker.
 // Responsibilities:
 //   - Outbox poller: expands approved alert outbox events into delivery jobs.
-//   - FCM dispatcher: sends delivery jobs to Firebase Cloud Messaging.
+//   - Web Push dispatcher: encrypts messages for consented browser subscriptions.
 //   - Escalation timer: fires escalation for unaccepted assignments past due.
 //   - Expiry guard: cancels delivery jobs for expired/withdrawn alerts.
 //
@@ -11,6 +11,10 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"github.com/balsuraksha/worker/internal/delivery"
+	"github.com/jackc/pgx/v5"
 	"os"
 	"os/signal"
 	"syscall"
@@ -33,9 +37,19 @@ func main() {
 	appMode := os.Getenv("APP_MODE")
 	notifMode := os.Getenv("NOTIFICATION_MODE")
 
-	// Enforce the safety matrix — demo+LIVE must never reach the worker
-	if appMode == "demo" && notifMode == "LIVE" {
-		log.Fatal().Msg("INVALID CONFIGURATION: demo + LIVE is not permitted. Worker refuses to start.")
+	if err := validateModes(appMode, notifMode); err != nil {
+		log.Fatal().Err(err).Msg("invalid worker configuration")
+	}
+	var provider delivery.Provider
+	if notifMode != "DISABLED" {
+		vapid, err := delivery.NewVAPIDProvider(os.Getenv("VAPID_PRIVATE_KEY"), os.Getenv("VAPID_SUBJECT"))
+		if err != nil || vapid == nil {
+			log.Fatal().Msg("valid VAPID configuration required; sending will not be simulated")
+		}
+		if vapid.PublicKey() != os.Getenv("VAPID_PUBLIC_KEY") {
+			log.Fatal().Msg("VAPID public and private key mismatch")
+		}
+		provider = vapid
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -46,6 +60,7 @@ func main() {
 		log.Fatal().Err(err).Msg("worker: database connection failed")
 	}
 	defer pool.Close()
+	dispatcher := delivery.NewDispatcher(pool, provider, notifMode == "TEST_ALLOWLIST")
 
 	log.Info().
 		Str("app_mode", appMode).
@@ -66,6 +81,10 @@ func main() {
 			case <-ticker.C:
 				if err := processOutbox(ctx, pool, appMode, notifMode); err != nil {
 					log.Error().Err(err).Msg("outbox poll error")
+				} else if notifMode != "DISABLED" {
+					if err := dispatcher.ProcessJobs(ctx); err != nil {
+						log.Error().Err(err).Msg("push dispatch error")
+					}
 				}
 			}
 		}
@@ -110,93 +129,81 @@ func main() {
 	log.Info().Msg("worker shutdown")
 }
 
-// processOutbox picks up PENDING outbox events and expands them into delivery jobs.
+func validateModes(appMode, notifMode string) error {
+	if appMode != "demo" && appMode != "beta" && appMode != "production" {
+		return errors.New("APP_MODE must be demo, beta or production")
+	}
+	if notifMode != "DISABLED" && notifMode != "TEST_ALLOWLIST" && notifMode != "LIVE" {
+		return errors.New("NOTIFICATION_MODE must be explicit")
+	}
+	if appMode == "demo" && notifMode == "LIVE" {
+		return errors.New("demo cannot send LIVE notifications")
+	}
+	return nil
+}
 func processOutbox(ctx context.Context, pool *pgxpool.Pool, appMode, notifMode string) error {
-	// Only process if sending is configured
+	if err := validateModes(appMode, notifMode); err != nil {
+		return err
+	}
 	if notifMode == "DISABLED" {
 		return nil
 	}
-
-	rows, err := pool.Query(ctx, `
-		SELECT id, alert_id, revision_id, payload
-		FROM outbox_events
-		WHERE status = 'PENDING'
-		ORDER BY created_at ASC
-		LIMIT 10
-		FOR UPDATE SKIP LOCKED
-	`)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var evID, alertID, revisionID string
-		var payload []byte
-		if err := rows.Scan(&evID, &alertID, &revisionID, &payload); err != nil {
-			continue
+	for i := 0; i < 10; i++ {
+		tx, err := pool.Begin(ctx)
+		if err != nil {
+			return err
 		}
-
-		if err := expandOutboxEvent(ctx, pool, evID, alertID, revisionID, notifMode); err != nil {
-			log.Error().Err(err).Str("outbox_event_id", evID).Msg("failed to expand outbox event")
-			_, _ = pool.Exec(ctx,
-				`UPDATE outbox_events SET status='FAILED', error_message=$1 WHERE id=$2`,
-				err.Error(), evID)
+		err = expandNext(ctx, tx, notifMode == "TEST_ALLOWLIST")
+		if err != nil {
+			_ = tx.Rollback(ctx)
+			if err == pgx.ErrNoRows {
+				return nil
+			}
+			return err
+		}
+		if err = tx.Commit(ctx); err != nil {
+			return err
 		}
 	}
 	return nil
 }
-
-// expandOutboxEvent creates delivery jobs for an outbox event.
-func expandOutboxEvent(ctx context.Context, pool *pgxpool.Pool, evID, alertID, revisionID, notifMode string) error {
-	// Verify alert is still ACTIVE before expanding
-	var alertStatus string
-	var expiry time.Time
-	if err := pool.QueryRow(ctx,
-		`SELECT a.status, ar.expiry_at FROM alerts a JOIN alert_revisions ar ON ar.id = a.active_revision_id
-		 WHERE a.id = $1 AND a.active_revision_id = $2`,
-		alertID, revisionID).Scan(&alertStatus, &expiry); err != nil {
-		return err
-	}
-	if alertStatus != "ACTIVE" || time.Now().After(expiry) {
-		log.Info().Str("alert_id", alertID).Str("status", alertStatus).Msg("alert no longer active, skipping expansion")
-		_, _ = pool.Exec(ctx, `UPDATE outbox_events SET status='DONE', processed_at=NOW() WHERE id=$1`, evID)
-		return nil
-	}
-
-	// Find matching subscriptions via PostGIS (ST_Intersects with coverage polygon)
-	isTest := notifMode == "TEST_ALLOWLIST"
-	rows, err := pool.Query(ctx, `
-		SELECT DISTINCT sub.id
-		FROM area_subscriptions sub
-		JOIN alert_revisions ar ON ST_Intersects(sub.polygon, ar.coverage_polygon)
-		WHERE ar.id = $1
-		  AND sub.revoked_at IS NULL
-		  AND ($2 = FALSE OR sub.is_test = TRUE)
-	`, revisionID, isTest)
+func expandNext(ctx context.Context, tx pgx.Tx, test bool) error {
+	var ev, id, revision string
+	err := tx.QueryRow(ctx, `SELECT id,alert_id,revision_id FROM outbox_events WHERE status='PENDING' AND event_type='alert_activated' ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED`).Scan(&ev, &id, &revision)
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var subID string
-		if err := rows.Scan(&subID); err != nil {
-			continue
+	// One transaction owns event expansion. A rollback leaves it PENDING.
+	var eligible bool
+	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM alerts a JOIN alert_revisions ar ON ar.id=a.active_revision_id JOIN alert_areas area ON area.id=ar.area_id AND area.active AND area.is_test=a.is_test JOIN alert_approvals aa ON aa.revision_id=ar.id AND aa.decision='approve' WHERE a.id=$1 AND ar.id=$2 AND a.status='ACTIVE' AND ar.status='APPROVED' AND ar.expiry_at>NOW() AND a.is_test=$3)`, id, revision, test).Scan(&eligible)
+	if err != nil {
+		return err
+	}
+	if eligible {
+		// Synthetic campaigns have a cumulative job budget. No silent truncation.
+		if test {
+			if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(7182402)`); err != nil {
+				return err
+			}
+			var total, matching int
+			if err = tx.QueryRow(ctx, `SELECT count(*) FROM delivery_jobs WHERE is_test`).Scan(&total); err != nil {
+				return err
+			}
+			if err = tx.QueryRow(ctx, `SELECT count(*) FROM area_subscriptions s JOIN alert_revisions ar ON ar.area_id=s.area_id WHERE ar.id=$1 AND s.is_test AND s.revoked_at IS NULL AND s.management_secret_hash IS NOT NULL`, revision).Scan(&matching); err != nil {
+				return err
+			}
+			if matching > 20 || total+matching > 60 {
+				_, err = tx.Exec(ctx, `UPDATE outbox_events SET status='FAILED',error_message='TEST campaign recipient budget reached' WHERE id=$1`, ev)
+				return err
+			}
 		}
-		// Insert delivery job — UNIQUE (revision_id, subscription_id) prevents duplicates
-		_, err := pool.Exec(ctx, `
-			INSERT INTO delivery_jobs (outbox_event_id, alert_id, revision_id, subscription_id, is_test)
-			VALUES ($1, $2, $3, $4, $5)
-			ON CONFLICT (revision_id, subscription_id) DO NOTHING
-		`, evID, alertID, revisionID, subID, isTest)
+		_, err = tx.Exec(ctx, `INSERT INTO delivery_jobs(outbox_event_id,alert_id,revision_id,subscription_id,is_test) SELECT $1,$2,$3,s.id,$4 FROM area_subscriptions s JOIN alert_revisions ar ON ar.area_id=s.area_id WHERE ar.id=$3 AND s.is_test=$4 AND s.revoked_at IS NULL AND s.management_secret_hash IS NOT NULL ON CONFLICT(revision_id,subscription_id) DO NOTHING`, ev, id, revision, test)
 		if err != nil {
-			log.Error().Err(err).Str("subscription_id", subID).Msg("failed to create delivery job")
+			return fmt.Errorf("expand recipients: %w", err)
 		}
 	}
-
-	_, _ = pool.Exec(ctx, `UPDATE outbox_events SET status='DONE', processed_at=NOW() WHERE id=$1`, evID)
-	return nil
+	_, err = tx.Exec(ctx, `UPDATE outbox_events SET status='DONE',processed_at=NOW() WHERE id=$1`, ev)
+	return err
 }
 
 // processEscalations fires escalation for unaccepted assignments past their due time.

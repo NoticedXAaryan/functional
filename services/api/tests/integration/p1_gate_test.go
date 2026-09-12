@@ -235,8 +235,16 @@ func TestT013_ConcurrentAcceptanceOptimisticLocking(t *testing.T) {
 	var wg sync.WaitGroup
 	statusCodes := make([]int, 2)
 	wg.Add(2)
-	go func() { defer wg.Done(); r := postJSON(t, url, map[string]interface{}{"version": 1}, hA); statusCodes[0] = r.StatusCode }()
-	go func() { defer wg.Done(); r := postJSON(t, url, map[string]interface{}{"version": 1}, hB); statusCodes[1] = r.StatusCode }()
+	go func() {
+		defer wg.Done()
+		r := postJSON(t, url, map[string]interface{}{"version": 1}, hA)
+		statusCodes[0] = r.StatusCode
+	}()
+	go func() {
+		defer wg.Done()
+		r := postJSON(t, url, map[string]interface{}{"version": 1}, hB)
+		statusCodes[1] = r.StatusCode
+	}()
 	wg.Wait()
 
 	wins := 0
@@ -272,7 +280,7 @@ func setupTestSession(t *testing.T, env *testEnv) string {
 		VALUES ($1, 'one_time', 'en', $2, NOW() + INTERVAL '15 minutes')
 	`, sessionID, tokenJTI)
 	if err != nil {
-		t.Skipf("T-test: could not seed session (table may differ): %v", err)
+		t.Fatalf("T-test: could not seed session (table may differ): %v", err)
 	}
 	return makeSessionToken(t, env.cfg, sessionID, "")
 }
@@ -288,7 +296,7 @@ func seedTwoOrgs(t *testing.T, env *testEnv) (orgA, orgB string) {
 			ON CONFLICT (id) DO NOTHING
 		`, id, fmt.Sprintf("Test Org %d", i), fmt.Sprintf("test-org-%s", id[:8]))
 		if err != nil {
-			t.Skipf("T-test: seed org failed: %v", err)
+			t.Fatalf("T-test: seed org failed: %v", err)
 		}
 	}
 	return
@@ -304,7 +312,7 @@ func seedCase(t *testing.T, env *testEnv, orgID string) string {
 		VALUES ($1, $2, 'RECEIVED', 'ask_for_help', '[SYNTHETIC TEST DATA]', $3, 1)
 	`, caseID, orgID, uuid.New().String())
 	if err != nil {
-		t.Skipf("T-test: seed case failed: %v", err)
+		t.Fatalf("T-test: seed case failed: %v", err)
 	}
 	return caseID
 }

@@ -12,6 +12,9 @@ package integration
 
 import (
 	"context"
+	"crypto/ecdh"
+	"crypto/rand"
+	"encoding/base64"
 	"net/http"
 	"testing"
 
@@ -89,6 +92,7 @@ func TestT026_TwoPersonAlertApproval(t *testing.T) {
 // TestT027_SingleTransactionActivation verifies that alert activation writes
 // alerts.status=ACTIVE and an outbox_events row atomically (same transaction).
 func TestT027_SingleTransactionActivation(t *testing.T) {
+	t.Setenv("NOTIFICATION_MODE", "TEST_ALLOWLIST")
 	env := newTestEnv(t)
 
 	org, _ := seedTwoOrgs(t, env)
@@ -109,7 +113,7 @@ func TestT027_SingleTransactionActivation(t *testing.T) {
 	}
 
 	// Activate with token
-	activatorToken := makeStaffToken(t, env.cfg, approverID, org, "responder")
+	activatorToken := makeStaffToken(t, env.cfg, approverID, org, "alert_approver")
 	activateResp := postJSON(t, urlf(env.server.URL, "/api/v1/staff/alerts/%s/activate", alertID),
 		map[string]interface{}{"approved_revision_id": revisionID},
 		map[string]string{"Authorization": "Bearer " + activatorToken})
@@ -139,15 +143,27 @@ func TestT027_SingleTransactionActivation(t *testing.T) {
 // TestT028_AreaSubscriptionConsent verifies that a subscription without consent_confirmed=true
 // returns 400, and with consent returns 201 with consent_confirmed_at set in DB.
 func TestT028_AreaSubscriptionConsent(t *testing.T) {
+	t.Setenv("NOTIFICATION_MODE", "TEST_ALLOWLIST")
+	t.Setenv("TEST_ENROLLMENT_CODE", "synthetic-test-invitation")
+	key, err := ecdh.P256().GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	publicKey := base64.RawURLEncoding.EncodeToString(key.PublicKey().Bytes())
+	t.Setenv("VAPID_PUBLIC_KEY", publicKey)
+	t.Setenv("VAPID_PRIVATE_KEY", base64.RawURLEncoding.EncodeToString(key.Bytes()))
+	secret := base64.RawURLEncoding.EncodeToString(make([]byte, 32))
 	env := newTestEnv(t)
 
 	// Without consent — must 400
 	noConsent := postJSON(t, urlf(env.server.URL, "/api/v1/subscriptions"),
 		map[string]interface{}{
-			"area_name":         "Test Ward 4",
-			"endpoint":          "https://push.example.com/test-endpoint-" + uuid.New().String(),
-			"auth":              "dGVzdC1hdXRoLWtleQ",
-			"p256dh":            "dGVzdC1wMjU2ZGgta2V5",
+			"area_id":           "demo-nagar-north",
+			"endpoint":          "https://fcm.googleapis.com/test-endpoint-" + uuid.New().String(),
+			"auth":              base64.RawURLEncoding.EncodeToString(make([]byte, 16)),
+			"p256dh":            publicKey,
+			"management_secret": secret,
+			"enrollment_code":   "synthetic-test-invitation",
 			"language":          "en",
 			"consent_confirmed": false,
 			"is_test":           true,
@@ -158,13 +174,18 @@ func TestT028_AreaSubscriptionConsent(t *testing.T) {
 	}
 
 	// With consent — must 201
-	endpoint := "https://push.example.com/valid-endpoint-" + uuid.New().String()
+	endpoint := "https://fcm.googleapis.com/valid-endpoint-" + uuid.New().String()
+	t.Cleanup(func() {
+		_, _ = env.pool.Exec(context.Background(), `UPDATE area_subscriptions SET revoked_at=NOW() WHERE endpoint=$1`, endpoint)
+	})
 	withConsent := postJSON(t, urlf(env.server.URL, "/api/v1/subscriptions"),
 		map[string]interface{}{
-			"area_name":         "Test Ward 4",
+			"area_id":           "demo-nagar-north",
 			"endpoint":          endpoint,
-			"auth":              "dGVzdC1hdXRoLWtleQ",
-			"p256dh":            "dGVzdC1wMjU2ZGgta2V5",
+			"auth":              base64.RawURLEncoding.EncodeToString(make([]byte, 16)),
+			"p256dh":            publicKey,
+			"management_secret": secret,
+			"enrollment_code":   "synthetic-test-invitation",
 			"language":          "en",
 			"consent_confirmed": true,
 			"is_test":           true,
@@ -259,7 +280,7 @@ func TestT030_AlertWithdrawalCancelsJobs(t *testing.T) {
 		UPDATE alerts SET status = 'ACTIVE', active_revision_id = $1 WHERE id = $2
 	`, revisionID, alertID)
 	if err != nil {
-		t.Skipf("T-030: could not force alert to ACTIVE: %v", err)
+		t.Fatalf("T-030: could not force alert to ACTIVE: %v", err)
 	}
 
 	// Seed a QUEUED delivery job for this alert
@@ -282,12 +303,12 @@ func TestT030_AlertWithdrawalCancelsJobs(t *testing.T) {
 	// Withdraw the alert via API
 	superToken := makeStaffToken(t, env.cfg, approverID, org, "supervisor")
 	withdrawResp := postJSON(t, urlf(env.server.URL, "/api/v1/staff/alerts/%s/withdraw", alertID),
-		nil, map[string]string{"Authorization": "Bearer " + superToken})
+		map[string]interface{}{"reason": "Synthetic withdrawal test"}, map[string]string{"Authorization": "Bearer " + superToken})
 
 	if withdrawResp.StatusCode != http.StatusOK && withdrawResp.StatusCode != http.StatusCreated &&
 		withdrawResp.StatusCode != http.StatusNoContent {
 		body := parseBody(t, withdrawResp)
-		t.Skipf("T-030: withdraw returned %d — %v (check route/role)", withdrawResp.StatusCode, body)
+		t.Fatalf("T-030: withdraw returned %d — %v (check route/role)", withdrawResp.StatusCode, body)
 	}
 
 	// alert.status must be WITHDRAWN
@@ -317,6 +338,11 @@ func TestT031_PublicAlertProjectionIsolation(t *testing.T) {
 	seedStaffMember(t, env, preparerID, org, "preparer")
 
 	alertID, revisionID := seedAlertRevision(t, env, org, preparerID)
+	approverID := uuid.NewString()
+	seedStaffMember(t, env, approverID, org, "approver")
+	if _, err := env.pool.Exec(context.Background(), `INSERT INTO alert_approvals(alert_id,revision_id,approver_id,decision) VALUES($1,$2,$3,'approve')`, alertID, revisionID, approverID); err != nil {
+		t.Fatal(err)
+	}
 
 	// Force ACTIVE so the public endpoint serves it
 	_, _ = env.pool.Exec(context.Background(), `
@@ -330,7 +356,7 @@ func TestT031_PublicAlertProjectionIsolation(t *testing.T) {
 	resp := getJSON(t, urlf(env.server.URL, "/api/v1/public/alerts/%s", alertID), nil)
 
 	if resp.StatusCode == http.StatusNotFound {
-		t.Skipf("T-031: alert not found in public endpoint — public projection may require approved revision")
+		t.Fatalf("T-031: alert not found in public endpoint — public projection may require approved revision")
 	}
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("T-031: expected 200, got %d", resp.StatusCode)
@@ -460,7 +486,7 @@ func seedStaffMember(t *testing.T, env *testEnv, staffID, orgID, role string) {
 		ON CONFLICT (id) DO NOTHING
 	`, staffID, orgID, staffID[:8]+"@test")
 	if err != nil {
-		t.Skipf("seed staff_member failed: %v", err)
+		t.Fatalf("seed staff_member failed: %v", err)
 	}
 	_, _ = env.pool.Exec(context.Background(), `
 		INSERT INTO role_grants (staff_id, organization_id, role)
@@ -477,20 +503,20 @@ func seedAlertRevision(t *testing.T, env *testEnv, orgID, preparerID string) (al
 
 	_, err := env.pool.Exec(context.Background(), `
 		INSERT INTO alerts (id, case_id, organization_id, status)
-		VALUES ($1, $2, $3, 'IN_REVIEW')
+		VALUES ($1, $2, $3, 'DRAFT')
 	`, alertID, caseID, orgID)
 	if err != nil {
-		t.Skipf("seed alert failed: %v", err)
+		t.Fatalf("seed alert failed: %v", err)
 	}
 
 	_, err = env.pool.Exec(context.Background(), `
 		INSERT INTO alert_revisions (id, alert_id, revision_number, status,
-			description_text, issuer_name, expiry_at, tip_route_email, prepared_by)
-		VALUES ($1, $2, 1, 'IN_REVIEW', 'Test alert: missing child', 'Test Org', NOW() + INTERVAL '24 hours',
-			'tips@test.example', $3)
+			description_text, issuer_name, expiry_at, tip_route_email, prepared_by, area_id, verification_reference)
+		VALUES ($1, $2, 1, 'DRAFT', '[FICTIONAL] Test alert: missing child', 'Test Org', NOW() + INTERVAL '24 hours',
+			'tips@test.example', $3, 'demo-nagar-north', 'Synthetic verification fixture')
 	`, revisionID, alertID, preparerID)
 	if err != nil {
-		t.Skipf("seed alert_revision failed: %v", err)
+		t.Fatalf("seed alert_revision failed: %v", err)
 	}
 	return
 }

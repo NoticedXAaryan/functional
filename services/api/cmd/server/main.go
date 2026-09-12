@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -85,11 +86,22 @@ func main() {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(30 * time.Second))
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Cache-Control", "no-store")
+			w.Header().Set("Referrer-Policy", "no-referrer")
+			w.Header().Set("X-Content-Type-Options", "nosniff")
+			next.ServeHTTP(w, r)
+		})
+	})
+	origins := []string{"http://localhost:5173", "http://localhost:5174", "http://127.0.0.1:5173", "http://127.0.0.1:5174"}
+	if value := os.Getenv("WEB_ORIGINS"); value != "" {
+		origins = strings.Split(value, ",")
+	}
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:5173", "http://localhost:5174", "http://127.0.0.1:5173", "http://127.0.0.1:5174"},
-		AllowOriginFunc:  func(r *http.Request, origin string) bool { return true },
+		AllowedOrigins:   origins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"},
-		AllowedHeaders:   []string{"*"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "Idempotency-Key"},
 		AllowCredentials: true,
 		MaxAge:           300,
 	}))

@@ -44,6 +44,7 @@ func (h *SessionHandler) Routes() http.Handler {
 // The case is persisted in a single transaction — the receipt is only returned
 // after a successful database commit.
 func (h *SessionHandler) HandleCreate(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 32*1024)
 	claims := authMW.GetSessionClaims(r.Context())
 	if claims == nil {
 		writeError(w, http.StatusUnauthorized, "unauthorized", "Session required")
@@ -93,7 +94,11 @@ func (h *SessionHandler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 		WHERE ps.id = $1 AND ps.revoked_at IS NULL AND ps.expires_at > NOW()
 	`, claims.SessionID).Scan(&orgID)
 	if err != nil {
-		// If no entry point linked, use the demo org
+		if h.cfg.AppMode != config.AppModeDemo || err != pgx.ErrNoRows {
+			writeError(w, http.StatusServiceUnavailable, "route_unavailable", "A verified support route is required before submitting")
+			return
+		}
+		// Only synthetic demos may use the fictional default organization.
 		orgID = "00000000-0000-0000-0000-000000000001"
 	}
 
@@ -101,8 +106,10 @@ func (h *SessionHandler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	var existingCaseID, existingReceiptID, existingStatus string
 	var existingCreatedAt time.Time
 	err = h.pool.QueryRow(r.Context(), `
-		SELECT id, receipt_id, status, created_at FROM cases WHERE idempotency_key = $1
-	`, idempotencyKey).Scan(&existingCaseID, &existingReceiptID, &existingStatus, &existingCreatedAt)
+		SELECT c.id, c.receipt_id, c.status, c.created_at FROM cases c
+		JOIN private_sessions ps ON ps.case_id = c.id
+		WHERE c.idempotency_key = $1 AND ps.id = $2
+	`, idempotencyKey, claims.SessionID).Scan(&existingCaseID, &existingReceiptID, &existingStatus, &existingCreatedAt)
 	if err == nil {
 		// Idempotent: return the existing receipt
 		w.Header().Set("Content-Type", "application/json")
@@ -144,15 +151,23 @@ func (h *SessionHandler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Link session to case
-	_, _ = tx.Exec(r.Context(), `
+	_, err = tx.Exec(r.Context(), `
 		UPDATE private_sessions SET case_id = $1 WHERE id = $2
 	`, caseID, claims.SessionID)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "db_error", "Report not confirmed; retry")
+		return
+	}
 
 	// Write initial case event
-	_, _ = tx.Exec(r.Context(), `
+	_, err = tx.Exec(r.Context(), `
 		INSERT INTO case_events (case_id, from_status, to_status, actor_type, case_version)
 		VALUES ($1, NULL, 'RECEIVED', 'system', 1)
 	`, caseID)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "db_error", "Report not confirmed; retry")
+		return
+	}
 
 	if err := tx.Commit(r.Context()); err != nil {
 		log.Error().Err(err).Msg("failed to commit case transaction")
@@ -332,13 +347,13 @@ func (h *StaffHandler) HandleList(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	type caseRow struct {
-		ID           string     `json:"case_id"`
-		Status       string     `json:"status"`
-		RouteType    string     `json:"route_type"`
-		ConflictFlag *string    `json:"conflict_flag"`
-		CreatedAt    time.Time  `json:"created_at"`
-		UpdatedAt    time.Time  `json:"updated_at"`
-		Version      int        `json:"version"`
+		ID           string    `json:"case_id"`
+		Status       string    `json:"status"`
+		RouteType    string    `json:"route_type"`
+		ConflictFlag *string   `json:"conflict_flag"`
+		CreatedAt    time.Time `json:"created_at"`
+		UpdatedAt    time.Time `json:"updated_at"`
+		Version      int       `json:"version"`
 	}
 	var cases []caseRow
 	for rows.Next() {

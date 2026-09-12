@@ -368,7 +368,7 @@ components:
     # ── Alerts ────────────────────────────────────────────────────────────
     AlertDraftRequest:
       type: object
-      required: [case_id, description_text, issuer_name, coverage_polygon, expiry_at, tip_route_email]
+      required: [case_id, description_text, issuer_name, area_id, expiry_at, verification_reference]
       properties:
         case_id:
           type: string
@@ -379,22 +379,20 @@ components:
           description: Approved public description only. No private narrative.
         issuer_name:
           type: string
-        coverage_polygon:
-          type: object
-          description: GeoJSON Polygon defining the alert coverage area.
-        area_version:
+        area_id:
           type: string
-          description: Version of the geographic dataset used.
+          description: Active registered area ID from subscriptions/config; exact area matching, not GPS tracking.
         expiry_at:
           type: string
           format: date-time
-        tip_route_email:
+        verification_reference:
           type: string
-          format: email
+          maxLength: 500
+          description: Staff-only reference supporting verification. Tips remain in-app.
 
     AlertRevision:
       type: object
-      required: [revision_id, alert_id, status, created_at]
+      required: [alert_id, status]
       properties:
         revision_id:
           type: string
@@ -479,13 +477,26 @@ components:
     # ── Subscriptions ─────────────────────────────────────────────────────
     SubscriptionRequest:
       type: object
-      required: [fcm_token, area_name, consent_confirmed]
+      required: [endpoint, auth, p256dh, area_id, consent_confirmed, management_secret]
       properties:
-        fcm_token:
+        endpoint:
           type: string
-          description: FCM registration token from browser.
-        area_name:
+          format: uri
+          description: HTTPS PushSubscription endpoint on an allowed browser push service.
+        auth:
           type: string
+          description: Base64url 16-byte browser subscription authentication secret.
+        p256dh:
+          type: string
+          description: Base64url valid P-256 browser subscription public key.
+        area_id:
+          type: string
+        management_secret:
+          type: string
+          description: Client-generated 32 random bytes in unpadded base64url; retained by this browser and only a SHA-256 digest stored by the API.
+        enrollment_code:
+          type: string
+          description: Required organizer invitation in TEST mode. Mode is selected by the server, never the requester.
         language:
           type: string
           default: en
@@ -503,7 +514,7 @@ components:
           format: uuid
         sighting_description:
           type: string
-          maxLength: 2000
+          maxLength: 5000
         approximate_location:
           type: string
           nullable: true
@@ -513,14 +524,14 @@ components:
 
     TipCreateResponse:
       type: object
-      required: [tip_receipt_id, received_at]
+      required: [receipt_id, status]
       properties:
-        tip_receipt_id:
+        receipt_id:
           type: string
           format: uuid
-        received_at:
+        status:
           type: string
-          format: date-time
+          enum: [received]
 
     # ── Health ────────────────────────────────────────────────────────────
     HealthResponse:
@@ -543,6 +554,81 @@ components:
 
 # ── Paths ────────────────────────────────────────────────────────────────────
 paths:
+  /subscriptions/config:
+    get:
+      operationId: notificationConfiguration
+      summary: Registered areas, public VAPID key and enrollment readiness
+      responses:
+        "200":
+          description: Public notification configuration; no private VAPID key or invitation is returned
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [areas, is_test, mode, enrollment_available, public_key]
+                properties:
+                  areas:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, name]
+                      properties:
+                        id: {type: string}
+                        name: {type: string}
+                  is_test: {type: boolean}
+                  mode: {$ref: '#/components/schemas/NotificationMode'}
+                  enrollment_available: {type: boolean}
+                  public_key: {type: string}
+        "503":
+          description: Area registration is unavailable
+
+  /public/alerts:
+    get:
+      operationId: listPublicAlerts
+      summary: Up to 50 current alerts for the runtime environment, optionally filtered by registered area
+      parameters:
+        - name: area_id
+          in: query
+          schema: {type: string}
+      responses:
+        "200":
+          description: Current approved public projections; no private case fields
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [alerts, is_test]
+                properties:
+                  is_test: {type: boolean}
+                  alerts:
+                    type: array
+                    items: {$ref: '#/components/schemas/PublicAlertView'}
+
+  /staff/alerts/{alert_id}/resolve:
+    post:
+      operationId: resolveAlert
+      summary: Resolve an active alert and cancel pending sends in one transaction
+      security:
+        - staffToken: []
+      parameters:
+        - name: alert_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: {type: string, minLength: 1, maxLength: 500}
+      responses:
+        "200": {description: Resolved or already resolved}
+        "403": {description: Requires same-organization approver, supervisor or admin}
+        "404": {description: Authorized alert not found}
+        "409": {description: Alert is not active}
 
   /healthz:
     get:
@@ -1204,6 +1290,12 @@ paths:
       summary: Unsubscribe (revocation effective before next send)
       tags: [subscriptions]
       parameters:
+        - name: Authorization
+          in: header
+          required: true
+          description: Bearer followed by this browser's management_secret; subscription ID alone grants no access.
+          schema:
+            type: string
         - name: subscription_id
           in: path
           required: true

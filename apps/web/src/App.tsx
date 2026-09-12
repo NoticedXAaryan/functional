@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 
-const API_BASE = 'http://localhost:8080/api/v1';
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1';
 
 interface PrivateSession {
   session_token: string;
@@ -35,6 +35,7 @@ interface AIAssessmentResult {
 }
 
 function App() {
+  const submissionKey = useRef<string | null>(null);
   const [activeTab, setActiveTab] = useState<'scan' | 'assessment' | 'intake' | 'receipt' | 'return'>('scan');
   
   // Session & Auth state
@@ -66,7 +67,7 @@ function App() {
 
   // ── Auto Inactivity Teardown (P2 Privacy Guarantee) ───────────────────
   useEffect(() => {
-    let timer: NodeJS.Timeout;
+    let timer: ReturnType<typeof setTimeout>;
     const resetTimer = () => {
       clearTimeout(timer);
       // 15-minute auto teardown on inactivity
@@ -105,8 +106,7 @@ function App() {
         console.warn('[sw] Registration failed (non-critical):', err);
       }
     };
-    window.addEventListener('load', register);
-    return () => window.removeEventListener('load', register);
+    void register();
   }, []);
 
   // ── Incognito Quick Exit ──────────────────────────────────────────────
@@ -116,9 +116,7 @@ function App() {
     setReturnCaseView(null);
     setMessages([]);
     setAiResult(null);
-    localStorage.clear();
-    sessionStorage.clear();
-    window.location.href = 'https://news.google.com';
+    window.location.replace('https://news.google.com');
   };
 
   // ── Step 1: Start Private Session ────────────────────────────────────
@@ -206,7 +204,8 @@ function App() {
     setErrorMsg(null);
     setShowPreview(false);
 
-    const idempotencyKey = crypto.randomUUID();
+    submissionKey.current ??= crypto.randomUUID();
+    const idempotencyKey = submissionKey.current;
 
     try {
       const res = await fetch(`${API_BASE}/cases`, {
@@ -366,13 +365,13 @@ function App() {
           </div>
           <h1 className="section-title">Scan QR or Start Private Intake</h1>
           <p className="section-desc" style={{ maxWidth: '560px', margin: '0 auto 28px' }}>
-            You are in a safe space. No personal tracking, browser cookies, or history will be recorded.
+            Ask for help without creating an account. A submitted report is retained for the support team. Quick exit does not erase browser history or copies saved by your device.
           </p>
 
           <div style={{ background: 'rgba(15,23,42,0.8)', border: '1px dashed var(--border-highlight)', borderRadius: 'var(--radius-md)', padding: '24px', maxWidth: '340px', margin: '0 auto 28px' }}>
             <div style={{ fontSize: '48px', marginBottom: '8px' }}>📱</div>
-            <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>Venue Entry Point Resolved</div>
-            <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>ID: EP-SCH-MUM-001 (School Safe Desk)</div>
+            <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>Demo entry point</div>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Fictional placement. A real venue has not been verified here.</div>
           </div>
 
           <div className="form-group" style={{ maxWidth: '340px', margin: '0 auto 24px' }}>
@@ -605,11 +604,11 @@ function App() {
       {activeTab === 'receipt' && receipt && (
         <main className="glass-panel" style={{ padding: '36px 28px', textAlign: 'center' }}>
           <div className="badge badge-emerald" style={{ marginBottom: '16px' }}>
-            ✓ CASE PERSISTED & ACKNOWLEDGED
+            ✓ REPORT RECEIVED
           </div>
           <h2 className="section-title">Intake Receipt</h2>
           <p className="section-desc" style={{ maxWidth: '560px', margin: '0 auto 20px' }}>
-            Your report is recorded safely.
+            Your report has been received. This does not mean a responder has accepted it yet.
           </p>
 
           <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', marginBottom: '24px' }}>
@@ -682,6 +681,11 @@ function App() {
                 </div>
                 <span className="badge badge-cyan">{returnCaseView.status}</span>
               </div>
+              <section aria-label="Messages from the support team">
+                <h3>Messages</h3>
+                {messages.length === 0 && <p>No messages yet.</p>}
+                {messages.map(message => <article key={message.id} style={{ padding: '16px', margin: '12px 0', border: '1px solid var(--border-color)', borderRadius: '8px' }}><p style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{message.body}</p><small>{new Date(message.sent_at).toLocaleString()}</small></article>)}
+              </section>
             </div>
           )}
         </main>
