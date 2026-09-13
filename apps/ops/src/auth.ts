@@ -1,93 +1,110 @@
-import Keycloak from 'keycloak-js';
+/**
+ * Staff authentication via server-side sessions with HttpOnly cookies.
+ *
+ * How it works:
+ * - Login: POST credentials → server creates DB session → sets HttpOnly cookie.
+ * - Subsequent requests: browser sends cookie automatically → server validates.
+ * - Page refresh: cookie persists → GET /auth/me restores identity. No logout.
+ * - CSRF: server sets a readable `bs_csrf` cookie; we send it as X-CSRF-Token header.
+ * - Logout: POST → server revokes session → clears cookies.
+ */
 
 export const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1';
 
 export interface StaffClaims {
-  token: string;
   staffId: string;
   orgId: string;
   role: string;
 }
 
-export interface StaffAuth {
-  mode: 'demo' | 'oidc';
-  client?: Keycloak;
-  staff: StaffClaims | null;
+/** Read the CSRF token from the readable cookie (not HttpOnly). */
+function getCSRFToken(): string {
+  const match = document.cookie.match(/(?:^|;\s*)bs_csrf=([^;]*)/);
+  return match ? decodeURIComponent(match[1]) : '';
 }
 
-// The official SDK owns OIDC redirects, PKCE, token refresh and logout.
-// The singleton also avoids initializing the adapter twice under React StrictMode.
-let initialization: Promise<StaffAuth> | undefined;
-let identityClient: Keycloak | undefined;
-const redirectUri = window.location.origin + window.location.pathname;
-
-export function initializeStaffAuth(): Promise<StaffAuth> {
-  initialization ??= initialize();
-  return initialization;
-}
-
-async function initialize(): Promise<StaffAuth> {
-  // Remove credentials persisted by older builds. Tokens now live only in memory.
-  sessionStorage.removeItem('staff_token');
-  const response = await fetch(`${API_BASE}/staff/auth/config`, { cache: 'no-store' });
-  if (!response.ok) throw new Error('Sign-in configuration is unavailable. Reload to try again.');
-  const config = await response.json();
-  if (config.mode === 'demo') return { mode: 'demo', staff: null };
-  if (config.mode !== 'oidc') throw new Error('Organization sign-in is not configured.');
-
-  const issuer = new URL(config.issuer);
-  const realmPath = issuer.pathname.match(/^(.*)\/realms\/([^/]+)$/);
-  if (!realmPath || !config.client_id) throw new Error('The Keycloak issuer configuration is invalid.');
-  const client = new Keycloak({
-    url: issuer.origin + realmPath[1],
-    realm: decodeURIComponent(realmPath[2]),
-    clientId: config.client_id,
-  });
-  identityClient = client;
-  const authenticated = await client.init({
-    onLoad: 'check-sso',
-    pkceMethod: 'S256',
-    flow: 'standard',
-    checkLoginIframe: false,
-    redirectUri,
-  });
-  if (!authenticated || !client.token) return { mode: 'oidc', client, staff: null };
-
-  const meResponse = await fetch(`${API_BASE}/staff/auth/me`, {
-    cache: 'no-store',
-    headers: { Authorization: `Bearer ${client.token}` },
-  });
-  if (!meResponse.ok) {
-    // A provider account alone never provisions staff permissions.
-    return { mode: 'oidc', client, staff: null };
+/**
+ * Check for an existing session on page load.
+ * The HttpOnly cookie is sent automatically by the browser.
+ * Returns the staff identity if a valid session exists, or null.
+ */
+export async function checkExistingSession(): Promise<StaffClaims | null> {
+  try {
+    const res = await fetch(`${API_BASE}/staff/auth/me`, {
+      credentials: 'include',
+      cache: 'no-store',
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return {
+      staffId: data.staff_id,
+      orgId: data.organization_id,
+      role: data.role,
+    };
+  } catch {
+    return null;
   }
-  const me = await meResponse.json();
+}
+
+/**
+ * Login with username/password.
+ * The server sets an HttpOnly session cookie in the response.
+ * We don't store any token — the browser handles cookie persistence.
+ */
+export async function login(username: string, password: string): Promise<StaffClaims> {
+  const res = await fetch(`${API_BASE}/staff/auth/login`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Login failed');
   return {
-    mode: 'oidc', client,
-    staff: { token: client.token, staffId: me.staff_id, orgId: me.organization_id, role: me.role },
+    staffId: data.staff_id,
+    orgId: data.organization_id,
+    role: data.role,
   };
 }
 
-export async function signInWithOrganization(): Promise<void> {
-  if (!identityClient) throw new Error('Organization sign-in is unavailable.');
-  await identityClient.login({ redirectUri, prompt: 'login' });
-}
-
-export async function signOutOfOrganization(): Promise<void> {
-  if (identityClient) await identityClient.logout({ redirectUri });
-}
-
-export async function staffFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
-  const headers = new Headers(init.headers);
-  if (identityClient && headers.has('Authorization')) {
-    try {
-      await identityClient.updateToken(30);
-    } catch {
-      identityClient.clearToken();
-      throw new Error('Your session has ended. Sign out and sign in again.');
-    }
-    if (!identityClient.token) throw new Error('Your session has ended. Sign out and sign in again.');
-    headers.set('Authorization', `Bearer ${identityClient.token}`);
+/** Logout — server revokes the session and clears cookies. */
+export async function logout(): Promise<void> {
+  try {
+    await fetch(`${API_BASE}/staff/auth/logout`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'X-CSRF-Token': getCSRFToken() },
+    });
+  } catch {
+    // Best-effort: cookie expiry is the fallback if this fails.
   }
-  return fetch(input, { ...init, headers, cache: 'no-store' });
+}
+
+/**
+ * Authenticated fetch wrapper.
+ * - Cookies are sent automatically (credentials: 'include').
+ * - CSRF token is added as a header for state-changing methods.
+ * - No Authorization header needed.
+ */
+export async function staffFetch(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+): Promise<Response> {
+  const headers = new Headers(init.headers);
+
+  // Add CSRF token for state-changing requests.
+  const method = (init.method ?? 'GET').toUpperCase();
+  if (method !== 'GET' && method !== 'HEAD') {
+    headers.set('X-CSRF-Token', getCSRFToken());
+  }
+
+  // Remove any leftover Authorization headers from old code paths.
+  headers.delete('Authorization');
+
+  return fetch(input, {
+    ...init,
+    headers,
+    credentials: 'include',
+    cache: 'no-store',
+  });
 }

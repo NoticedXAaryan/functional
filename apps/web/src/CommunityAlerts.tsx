@@ -43,7 +43,7 @@ export default function CommunityAlerts() {
     } catch (e) { setError((e as Error).message); setLoaded(false); }
   };
   useEffect(() => {
-    document.title = 'Savera Alert · Local child safety';
+    document.title = 'Nithari Alert — Nearby missing-child alerts · Bal Setu';
     request('/subscriptions/config').then(setConfig).catch(e => setError(e.message));
     if (supported) navigator.serviceWorker.register('/sw.js').then(async reg => setDeviceReady(Notification.permission === 'granted' && !!await reg.pushManager.getSubscription())).catch(() => setDeviceReady(false));
     const rotated = (event: MessageEvent) => { if (event.data?.type === 'PUSH_SUBSCRIPTION_CHANGED') { setDeviceReady(false); setNotice('Your browser subscription changed. Re-enable notifications.'); } };
@@ -90,7 +90,7 @@ export default function CommunityAlerts() {
     } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   };
   return <div className="savera">
-    <header className="sa-header"><a className="sa-brand" href="/alerts"><img src="/savera.svg" alt="" width="46" height="46"/><span>Savera <strong>Alert</strong><small>Missing-child alerts in your area</small></span></a><nav className="workspace-links" aria-label="Other spaces"><a href="/">Home & private help</a><a href={import.meta.env.VITE_OPS_URL ?? 'http://localhost:5174'}>Staff sign in</a></nav></header>
+    <header className="sa-header"><a className="sa-brand" href="/alerts"><img src="/savera.svg" alt="" width="46" height="46"/><span>Bal Setu <strong>· Nithari Alert</strong><small>Nearby missing-child alerts</small></span></a><nav className="workspace-links" aria-label="Other spaces"><a href="/">Home and private help</a><a href={import.meta.env.VITE_OPS_URL ?? 'http://localhost:5174'}>Staff sign in</a></nav></header>
     {config?.is_test && <div className="sa-test">Practice alerts only — no real missing-child cases are published here.</div>}
     <main className="sa-main">
       <section className="sa-intro"><p className="sa-eyebrow">Local missing-child alerts</p><h1>{alertID ? 'Read this alert' : 'Missing-child alerts\nnear you'}</h1><p>Choose an area to read alerts published by the reviewing team. Open an alert to see its latest details or share something you saw.</p><div className="sa-principles"><span>Staff review each alert</span><span>You choose the area</span><span>You can read alerts without signing in</span></div></section>
@@ -112,7 +112,7 @@ export default function CommunityAlerts() {
         {enrollment?.subscription_id && <button className="sa-stop" disabled={busy} onClick={() => void stop()}>Stop notifications</button>}
         {(config?.enrollment_available || enrollment?.subscription_id) && <p className="sa-fine">Notifications contain public alert information only. Your browser or phone may delay or block them. Use “Stop notifications” here to unsubscribe.</p>}
       </aside></div>
-      <footer className="sa-footer"><strong>Immediate danger?</strong> Call <a href="tel:112">112</a>. For child support, call <a href="tel:1098">1098</a>.<p>Savera is an independent project. No automatic police dispatch or government broadcast is connected.</p></footer>
+      <footer className="sa-footer"><strong>Immediate danger?</strong> Call <a href="tel:112">112</a>. For child support, call <a href="tel:1098">1098</a>.<p>Bal Setu is an independent project. Nithari Alert is not a government broadcast system. No automatic police dispatch is connected.</p></footer>
     </main>
   </div>;
 }

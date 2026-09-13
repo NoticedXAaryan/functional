@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import './App.css';
 import AlertConsole from './AlertConsole';
-import { API_BASE, initializeStaffAuth, signInWithOrganization, signOutOfOrganization, staffFetch as fetch } from './auth';
+import { API_BASE, checkExistingSession, login, logout, staffFetch as fetch } from './auth';
 import type { StaffClaims } from './auth';
 
 interface CaseRow {
@@ -41,23 +41,25 @@ type Screen = 'login' | 'cases' | 'case_detail' | 'alerts';
 
 function App() {
   const [staff, setStaff] = useState<StaffClaims | null>(null);
-  const [authMode, setAuthMode] = useState<'demo' | 'oidc' | null>(null);
 
   const [screen, setScreen] = useState<Screen>(staff ? 'cases' : 'login');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Restore session from HttpOnly cookie on page load.
   useEffect(() => {
     let active = true;
-    initializeStaffAuth().then(auth => {
-      if (!active) return;
-      setAuthMode(auth.mode);
-      setStaff(auth.staff);
-      setScreen(auth.staff ? 'cases' : 'login');
-      if (auth.client?.authenticated && !auth.staff) {
-        setErrorMsg('Your organization account has no active staff access. Ask your administrator to assign it.');
-      }
-    }).catch(error => { if (active) setErrorMsg(error instanceof Error ? error.message : 'Sign-in is unavailable.'); });
+    setLoading(true);
+    checkExistingSession()
+      .then(existing => {
+        if (!active) return;
+        if (existing) {
+          setStaff(existing);
+          setScreen('cases');
+        }
+      })
+      .catch(() => { /* no session — stay on login */ })
+      .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, []);
 
@@ -74,13 +76,13 @@ function App() {
   const [isStaffNote, setIsStaffNote] = useState(false);
  const [responders,setResponders]=useState<Array<{id:string;name:string}>>([]);
  const [chosenResponder,setChosenResponder]=useState('');
- useEffect(()=>{if(staff && ['supervisor','admin'].includes(staff.role)) fetch(`${API_BASE}/staff/assignments/responders`,{headers:{Authorization:`Bearer ${staff.token}`}}).then(async r=>{const d=await r.json();if(!r.ok)throw new Error(d.error || 'Could not load responders');setResponders(d.responders)}).catch(e=>setErrorMsg(e.message))},[staff]);
+ useEffect(()=>{if(staff && ['supervisor','admin'].includes(staff.role)) fetch(`${API_BASE}/staff/assignments/responders`,{headers:{'Content-Type':'application/json'}}).then(async r=>{const d=await r.json();if(!r.ok)throw new Error(d.error || 'Could not load responders');setResponders(d.responders)}).catch(e=>setErrorMsg(e.message))},[staff]);
 
 
   const authHeaders = useCallback(() => ({
     'Content-Type': 'application/json',
-    ...(staff ? { 'Authorization': `Bearer ${staff.token}` } : {}),
-  }), [staff]);
+    // No Authorization header needed — session cookie is sent automatically.
+  }), []);
 
   // ── Login ──────────────────────────────────────────────────────────────
   const handleLogin = async (e: React.FormEvent) => {
@@ -88,19 +90,7 @@ function App() {
     setLoading(true);
     setErrorMsg(null);
     try {
-      const res = await fetch(`${API_BASE}/staff/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Login failed');
-      const claims: StaffClaims = {
-        token: data.token,
-        staffId: data.staff_id,
-        orgId: data.organization_id,
-        role: data.role,
-      };
+      const claims = await login(username, password);
       setPassword('');
       setStaff(claims);
       setScreen('cases');
@@ -111,16 +101,13 @@ function App() {
     }
   };
 
-  const handleLogout = () => {
-    sessionStorage.removeItem('staff_token');
+  const handleLogout = async () => {
+    await logout();
     setStaff(null);
     setCases([]);
     setSelectedCase(null);
     setMessages([]);
     setScreen('login');
-    if (authMode === 'oidc') {
-      void signOutOfOrganization().catch(() => setErrorMsg('Signed out of this screen. Organization logout failed; close this tab and end your organization session.'));
-    }
   };
 
   // ── Fetch case queue ────────────────────────────────────────────────────
@@ -249,8 +236,8 @@ function App() {
       {/* Header */}
       <header className="ops-header">
         <div className="ops-brand">
-          <span className="ops-brand-icon">🛡️</span>
-          <span className="ops-brand-name">Bal Suraksha <span className="ops-badge-ops">Staff</span></span>
+          <span className="ops-brand-icon"><img src="/brand/bal-setu-app-icon-master.png" width="32" height="32" alt="" style={{borderRadius:'6px'}} /></span>
+          <span className="ops-brand-name">Bal Setu <span className="ops-badge-ops">Staff</span></span>
         </div>
         <nav className="ops-workspaces" aria-label="Other spaces"><a href={import.meta.env.VITE_PUBLIC_URL ?? 'http://localhost:5173'}>Public home</a><a href={`${(import.meta.env.VITE_PUBLIC_URL ?? 'http://localhost:5173').replace(/\/$/, '')}/alerts`}>Local alerts</a></nav>
         {staff && (
@@ -278,16 +265,10 @@ function App() {
         {/* ── LOGIN ── */}
         {screen === 'login' && (
           <div className="ops-card ops-login-card">
-            <h1 className="ops-title">Staff Sign In</h1>
+            <h1 className="ops-title">Staff Sign In — Bal Setu</h1>
             <p className="ops-subtitle">Authorized responders and supervisors only.</p>
-            {authMode === null && !errorMsg && <p role="status">Loading sign-in…</p>}
-            {authMode === 'oidc' && (
-              <button type="button" className="ops-btn-primary" onClick={() => {
-                void signInWithOrganization().catch(() => setErrorMsg('Organization sign-in is unavailable. Please try again.'));
-              }}>Sign in with organization</button>
-            )}
-            {authMode === 'demo' && <details className="ops-help"><summary>Trying the demo? Start here</summary><p>Use preparer.demo to prepare an alert, then sign out and use approver.demo to approve and publish it. Both use the local demo password: demo-password. These accounts are only for fictional local data.</p><p>First create a missing-child report in the public application. It will appear in this organization's case queue.</p></details>}
-            {authMode === 'demo' && <form onSubmit={handleLogin} className="ops-form">
+            <details className="ops-help"><summary>Trying the demo? Start here</summary><p>Use preparer.demo to prepare an alert, then sign out and use approver.demo to approve and publish it. Both use the local demo password: demo-password. These accounts are only for fictional local data.</p><p>First create a missing-child report in the public application. It will appear in this organization's case queue.</p></details>
+            <form onSubmit={handleLogin} className="ops-form">
               <label htmlFor="username" className="ops-label">Username</label>
               <input id="username" type="text" className="ops-input" value={username}
                 onChange={e => setUsername(e.target.value)} autoComplete="username" required />
@@ -297,7 +278,7 @@ function App() {
               <button id="login-submit" type="submit" className="ops-btn-primary" disabled={loading}>
                 {loading ? 'Signing in…' : 'Sign In →'}
               </button>
-            </form>}
+            </form>
           </div>
         )}
 

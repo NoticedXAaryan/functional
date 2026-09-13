@@ -72,13 +72,20 @@ func (h *SessionHandler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 		RouteType             string            `json:"route_type"`
 		ConflictFlag          *string           `json:"conflict_flag"`
 		SafeContactPreference ContactPreference `json:"safe_contact_preference"`
+		// InAppReplyConsent: explicit child consent for staff replies.
+		// nil = not provided (treated as no_contact). true = child wants in-app replies.
+		// false = child explicitly declined replies.
+		InAppReplyConsent     *bool             `json:"in_app_reply_consent"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", "Invalid JSON body")
 		return
 	}
-	if req.AccountText == "" {
-		writeError(w, http.StatusBadRequest, "missing_account_text", "account_text is required")
+	// account_text is optional: a route_type selection alone is a valid help signal.
+	// Trim and store; empty text is permitted and kept as-is.
+	req.AccountText = strings.TrimSpace(req.AccountText)
+	if len(req.AccountText) > 16000 {
+		writeError(w, 400, "invalid_text", "Message is too long; please shorten it")
 		return
 	}
 	validRoutes := map[string]bool{"ask_for_help": true, "worried_about_someone": true, "missing_child": true}
@@ -87,7 +94,6 @@ func (h *SessionHandler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 			"route_type must be ask_for_help, worried_about_someone, or missing_child")
 		return
 	}
-
 	if req.ConflictFlag != nil && *req.ConflictFlag != "" {
 		if *req.ConflictFlag != "school_implicated" && *req.ConflictFlag != "caregiver_implicated" && *req.ConflictFlag != "staff_implicated" {
 			writeError(w, 400, "invalid_conflict", "Choose a listed conflict option")
@@ -95,10 +101,6 @@ func (h *SessionHandler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		req.ConflictFlag = nil
-	}
-	if strings.TrimSpace(req.AccountText) == "" || len(req.AccountText) > 16000 {
-		writeError(w, 400, "invalid_text", "Describe what happened in 16,000 bytes or fewer")
-		return
 	}
 	if err := req.SafeContactPreference.Validate(); err != nil {
 		writeError(w, 400, "invalid_contact", err.Error())
@@ -190,7 +192,8 @@ func (h *SessionHandler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err = tx.Exec(r.Context(), `INSERT INTO contact_preferences(case_id,preferred_channel,safe_hours_start,safe_hours_end,time_zone) VALUES($1,$2,$3::time,$4::time,$5)`, caseID, req.SafeContactPreference.PreferredChannel, req.SafeContactPreference.SafeHoursStart, req.SafeContactPreference.SafeHoursEnd, req.SafeContactPreference.TimeZone); err != nil {
+	_, err = tx.Exec(r.Context(), `INSERT INTO contact_preferences(case_id,preferred_channel,safe_hours_start,safe_hours_end,time_zone,in_app_reply_consent) VALUES($1,$2,$3::time,$4::time,$5,$6)`, caseID, req.SafeContactPreference.PreferredChannel, req.SafeContactPreference.SafeHoursStart, req.SafeContactPreference.SafeHoursEnd, req.SafeContactPreference.TimeZone, req.InAppReplyConsent)
+	if err != nil {
 		writeError(w, 503, "db_error", "Report not confirmed; retry")
 		return
 	}

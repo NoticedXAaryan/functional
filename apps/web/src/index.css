@@ -1,3 +1,4 @@
+@import './bs-tokens.css';
 :root {
   color-scheme: light;
   --font-sans: 'Segoe UI', Arial, sans-serif;

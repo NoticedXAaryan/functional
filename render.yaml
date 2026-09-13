@@ -26,7 +26,7 @@ services:
       - key: AI_ENABLED
         value: "false"
       - key: STAFF_AUTH_MODE
-        value: demo
+        value: session
     healthCheckPath: /healthz
 
   # ── Go background worker ─────────────────────────────────────────────

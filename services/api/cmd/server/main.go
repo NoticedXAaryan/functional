@@ -69,13 +69,7 @@ func main() {
 	}
 	defer pool.Close()
 
-	staffAuth := authMW.RequireStaffToken(cfg)
-	if cfg.StaffAuthMode == "oidc" {
-		staffAuth, err = authMW.NewOIDCStaffMiddleware(context.Background(), cfg, pool)
-		if err != nil {
-			log.Fatal().Err(err).Msg("identity-provider configuration failed; refusing staff authentication fallback")
-		}
-	}
+	staffAuth := authMW.RequireStaffSession(cfg, pool)
 
 	// ── Router ─────────────────────────────────────────────────────────────
 	r := chi.NewRouter()
@@ -101,7 +95,7 @@ func main() {
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   origins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "Idempotency-Key"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "Idempotency-Key", "X-CSRF-Token"},
 		AllowCredentials: true,
 		MaxAge:           300,
 	}))
@@ -152,25 +146,22 @@ func main() {
 			r.Delete("/sessions/{sessionID}", sessions.NewHandler(pool, cfg).HandleEnd)
 		})
 
-		// Staff — all require staff JWT
+		// Staff — all require staff session cookie
 		r.Route("/staff", func(r chi.Router) {
 			r.Get("/auth/config", func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				w.Header().Set("Cache-Control", "no-store")
-				_ = json.NewEncoder(w).Encode(map[string]string{"mode": cfg.StaffAuthMode, "issuer": cfg.OIDCIssuer, "client_id": cfg.OIDCClientID})
+				_ = json.NewEncoder(w).Encode(map[string]string{"mode": "session"})
 			})
-			// Login is public within /staff
-			r.Post("/auth/login", authMW.NewStaffAuthHandler(pool, cfg).HandleLogin)
+			// Login and logout are public within /staff (no session required)
+			authHandler := authMW.NewStaffAuthHandler(pool, cfg)
+			r.Post("/auth/login", authHandler.HandleLogin)
+			r.Post("/auth/logout", authHandler.HandleLogout)
 
-			// Everything else requires staff auth
+			// Everything else requires staff session
 			r.Group(func(r chi.Router) {
 				r.Use(staffAuth)
-				r.Get("/auth/me", func(w http.ResponseWriter, r *http.Request) {
-					claims := authMW.GetStaffClaims(r.Context())
-					w.Header().Set("Content-Type", "application/json")
-					w.Header().Set("Cache-Control", "no-store")
-					_ = json.NewEncoder(w).Encode(map[string]string{"staff_id": claims.StaffID, "organization_id": claims.OrganizationID, "role": claims.Role})
-				})
+				r.Get("/auth/me", authHandler.HandleMe)
 				r.Mount("/cases", cases.NewStaffHandler(pool, cfg).Routes())
 				r.Mount("/assignments", assignments.NewHandler(pool, cfg).Routes())
 				r.Mount("/messages", messages.NewHandler(pool, cfg).Routes())

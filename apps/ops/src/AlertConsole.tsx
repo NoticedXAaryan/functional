@@ -20,7 +20,7 @@ export default function AlertConsole({ staff }: { staff: StaffClaims }) {
   const approve = ['alert_approver', 'admin'].includes(staff.role);
   const close = ['alert_approver', 'supervisor', 'admin'].includes(staff.role);
   const api = async (path: string, body?: unknown) => {
-    const response = await staffFetch(`${API_BASE}${path}`, { method: body === undefined ? 'GET' : 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${staff.token}` }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+    const response = await staffFetch(`${API_BASE}${path}`, { method: body === undefined ? 'GET' : 'POST', headers: { 'Content-Type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'The action could not be completed');
     return data;
@@ -38,7 +38,7 @@ export default function AlertConsole({ staff }: { staff: StaffClaims }) {
     try { await api(path, body); setMessage(success); await refresh(); return true; } catch (e) { setError((e as Error).message); return false; } finally { setBusy(false); }
   };
   return <section>
-    <div className="ops-page-header"><div><h2 className="ops-title">Savera Alert</h2><p className="ops-subtitle">Prepare → independent review → publish → monitor → close</p></div><button className="ops-btn-secondary" disabled={busy} onClick={() => void refresh()}>Refresh</button></div>
+    <div className="ops-page-header"><div><h2 className="ops-title">Nithari Alert — Nearby missing-child alerts</h2><p className="ops-subtitle">Prepare → independent review → publish → monitor → close</p></div><button className="ops-btn-secondary" disabled={busy} onClick={() => void refresh()}>Refresh</button></div>
     <p className="ops-subtitle">{mode === 'DISABLED' ? 'Publishing and notifications are currently turned off. You can prepare and review drafts.' : mode === 'TEST_ALLOWLIST' ? 'Practice alerts go only to invited people who have signed up.' : 'Approved alerts can be published to people who signed up for their area.'}</p>
     {error && <p className="ops-error" role="alert">{error}</p>}{message && <p role="status">{message}</p>}
     {prepare && <form className="ops-card ops-form" onSubmit={async e => {

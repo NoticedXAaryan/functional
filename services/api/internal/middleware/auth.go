@@ -4,12 +4,15 @@ package middleware
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 
 	"github.com/balsuraksha/api/internal/config"
@@ -22,6 +25,13 @@ type contextKey string
 const (
 	sessionClaimsKey contextKey = "session_claims"
 	staffClaimsKey   contextKey = "staff_claims"
+
+	// Staff session cookies
+	staffSessionCookie = "bs_staff_session"
+	csrfCookieName     = "bs_csrf"
+	csrfHeaderName     = "X-CSRF-Token"
+	staffSessionMaxAge = 8 * time.Hour  // sliding window per request
+	staffSessionAbsMax = 24 * time.Hour // hard limit from creation
 )
 
 // SessionClaims are the JWT claims for a private session.
@@ -31,7 +41,8 @@ type SessionClaims struct {
 	CaseID    string `json:"cid,omitempty"`
 }
 
-// StaffClaims are the JWT claims for an authenticated staff member.
+// StaffClaims carries authenticated staff identity through request context.
+// Populated by RequireStaffSession (cookie auth) or RequireStaffToken (legacy JWT).
 type StaffClaims struct {
 	jwt.RegisteredClaims
 	StaffID        string `json:"staff_id"`
@@ -143,7 +154,7 @@ func GetStaffClaims(ctx context.Context) *StaffClaims {
 	return c
 }
 
-// StaffAuthHandler handles the local-stub staff login endpoint.
+// StaffAuthHandler handles staff login, logout, and session identity.
 type StaffAuthHandler struct {
 	pool *db.Pool
 	cfg  *config.Config
@@ -154,14 +165,68 @@ func NewStaffAuthHandler(pool *db.Pool, cfg *config.Config) *StaffAuthHandler {
 	return &StaffAuthHandler{pool: pool, cfg: cfg}
 }
 
-// HandleLogin authenticates staff with username/password and returns a JWT.
-// This is the local stub for demo mode. In production, replace with OIDC.
+// generateCSRFToken creates a cryptographically random 32-byte hex token.
+func generateCSRFToken() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
+
+// staffCookieSecure returns true when cookies must carry the Secure flag.
+func staffCookieSecure(cfg *config.Config) bool {
+	return cfg.AppMode != config.AppModeDemo
+}
+
+// setStaffSessionCookies writes the HttpOnly session cookie and readable CSRF cookie.
+func setStaffSessionCookies(w http.ResponseWriter, cfg *config.Config, sessionID, csrfToken string) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     staffSessionCookie,
+		Value:    sessionID,
+		Path:     "/api/v1/staff",
+		HttpOnly: true,
+		Secure:   staffCookieSecure(cfg),
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   int(staffSessionMaxAge.Seconds()),
+	})
+	http.SetCookie(w, &http.Cookie{
+		Name:     csrfCookieName,
+		Value:    csrfToken,
+		Path:     "/",
+		HttpOnly: false, // JavaScript reads this to send as X-CSRF-Token header
+		Secure:   staffCookieSecure(cfg),
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   int(staffSessionMaxAge.Seconds()),
+	})
+}
+
+// clearStaffSessionCookies expires both session cookies.
+func clearStaffSessionCookies(w http.ResponseWriter, cfg *config.Config) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     staffSessionCookie,
+		Value:    "",
+		Path:     "/api/v1/staff",
+		HttpOnly: true,
+		Secure:   staffCookieSecure(cfg),
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   -1,
+	})
+	http.SetCookie(w, &http.Cookie{
+		Name:     csrfCookieName,
+		Value:    "",
+		Path:     "/",
+		HttpOnly: false,
+		Secure:   staffCookieSecure(cfg),
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   -1,
+	})
+}
+
+// HandleLogin authenticates staff and creates a server-side session stored in an HttpOnly cookie.
+// The session survives page refresh because the browser sends the cookie automatically.
 func (h *StaffAuthHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
-	if h.cfg.AppMode != config.AppModeDemo || h.cfg.StaffAuthMode == "oidc" {
-		writeError(w, http.StatusForbidden, "use_organization_sign_in", "Sign in through your organization's identity provider")
-		return
-	}
 	var req struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
@@ -175,7 +240,7 @@ func (h *StaffAuthHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Look up staff member
+	// Look up staff member and their highest-priority active role.
 	var staffID, orgID, passwordHash, role string
 	err := h.pool.QueryRow(r.Context(), `
 		SELECT sm.id, sm.organization_id, sm.password_hash, rg.role
@@ -186,45 +251,152 @@ func (h *StaffAuthHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		LIMIT 1
 	`, req.Username).Scan(&staffID, &orgID, &passwordHash, &role)
 	if err != nil {
-		// Don't reveal whether username exists
 		writeError(w, http.StatusUnauthorized, "invalid_credentials", "Invalid username or password")
 		return
 	}
 
-	// Verify bcrypt password
 	if err := verifyPassword(passwordHash, req.Password); err != nil {
-		log.Warn().Str("username", req.Username).Msg("failed login attempt")
+		log.Warn().Str("username", req.Username).Msg("failed staff login attempt")
 		writeError(w, http.StatusUnauthorized, "invalid_credentials", "Invalid username or password")
+		return
+	}
+
+	// Create server-side session.
+	sessionID := uuid.New().String()
+	csrfToken, err := generateCSRFToken()
+	if err != nil {
+		log.Error().Err(err).Msg("failed to generate CSRF token")
+		writeError(w, http.StatusInternalServerError, "session_error", "Could not create session")
 		return
 	}
 
 	expiresAt := time.Now().Add(time.Duration(h.cfg.StaffJWTExpiryHours) * time.Hour)
-	claims := &StaffClaims{
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(expiresAt),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			Subject:   staffID,
-		},
-		StaffID:        staffID,
-		OrganizationID: orgID,
-		Role:           role,
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenStr, err := token.SignedString([]byte(h.cfg.SessionSecret))
+	_, err = h.pool.Exec(r.Context(), `
+		INSERT INTO staff_sessions (id, staff_id, organization_id, role, csrf_token, ip_address, user_agent, expires_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		sessionID, staffID, orgID, role, csrfToken,
+		r.RemoteAddr, truncateUA(r.UserAgent()), expiresAt,
+	)
 	if err != nil {
-		log.Error().Err(err).Msg("failed to sign staff JWT")
-		writeError(w, http.StatusInternalServerError, "token_error", "Could not issue token")
+		log.Error().Err(err).Msg("failed to create staff session")
+		writeError(w, http.StatusInternalServerError, "session_error", "Could not create session")
 		return
 	}
 
+	setStaffSessionCookies(w, h.cfg, sessionID, csrfToken)
+	log.Info().Str("username", req.Username).Str("staff_id", staffID).Msg("staff login")
+
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"token":           tokenStr,
-		"expires_at":      expiresAt,
 		"staff_id":        staffID,
 		"role":            role,
 		"organization_id": orgID,
 	})
+}
+
+// HandleLogout revokes the active session and clears cookies.
+func (h *StaffAuthHandler) HandleLogout(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	cookie, err := r.Cookie(staffSessionCookie)
+	if err == nil && cookie.Value != "" {
+		_, _ = h.pool.Exec(r.Context(),
+			`UPDATE staff_sessions SET revoked_at = NOW() WHERE id = $1 AND revoked_at IS NULL`,
+			cookie.Value)
+	}
+	clearStaffSessionCookies(w, h.cfg)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "signed_out"})
+}
+
+// HandleMe returns the authenticated staff identity from the session cookie.
+// This is the endpoint the frontend calls on page load to check for an existing session.
+func (h *StaffAuthHandler) HandleMe(w http.ResponseWriter, r *http.Request) {
+	claims := GetStaffClaims(r.Context())
+	if claims == nil {
+		writeError(w, http.StatusUnauthorized, "no_session", "Not signed in")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{
+		"staff_id":        claims.StaffID,
+		"organization_id": claims.OrganizationID,
+		"role":            claims.Role,
+	})
+}
+
+// RequireStaffSession validates the HttpOnly session cookie against the database.
+// It populates StaffClaims in context, identical to RequireStaffToken, so all
+// downstream handlers work without changes.
+func RequireStaffSession(cfg *config.Config, pool *db.Pool) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Cache-Control", "no-store")
+
+			cookie, err := r.Cookie(staffSessionCookie)
+			if err != nil || cookie.Value == "" {
+				writeError(w, http.StatusUnauthorized, "no_session", "Sign in required")
+				return
+			}
+
+			// Validate session against DB.
+			var staffID, orgID, role, storedCSRF string
+			var expiresAt, createdAt time.Time
+			var revokedAt *time.Time
+			err = pool.QueryRow(r.Context(), `
+				SELECT staff_id, organization_id, role, csrf_token,
+				       expires_at, created_at, revoked_at
+				FROM staff_sessions WHERE id = $1`,
+				cookie.Value,
+			).Scan(&staffID, &orgID, &role, &storedCSRF, &expiresAt, &createdAt, &revokedAt)
+			if err != nil {
+				clearStaffSessionCookies(w, cfg)
+				writeError(w, http.StatusUnauthorized, "invalid_session", "Session not found")
+				return
+			}
+			if revokedAt != nil {
+				clearStaffSessionCookies(w, cfg)
+				writeError(w, http.StatusUnauthorized, "session_revoked", "Session has ended")
+				return
+			}
+			if time.Now().After(expiresAt) {
+				clearStaffSessionCookies(w, cfg)
+				writeError(w, http.StatusUnauthorized, "session_expired", "Session has expired. Please sign in again.")
+				return
+			}
+
+			// CSRF check on state-changing methods.
+			if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions {
+				csrfHeader := r.Header.Get(csrfHeaderName)
+				if csrfHeader == "" || csrfHeader != storedCSRF {
+					writeError(w, http.StatusForbidden, "csrf_invalid", "Invalid or missing CSRF token")
+					return
+				}
+			}
+
+			// Sliding session extension, capped at absolute max from creation.
+			newExpiry := time.Now().Add(staffSessionMaxAge)
+			absMax := createdAt.Add(staffSessionAbsMax)
+			if newExpiry.After(absMax) {
+				newExpiry = absMax
+			}
+			_, _ = pool.Exec(r.Context(),
+				`UPDATE staff_sessions SET last_active_at = NOW(), expires_at = $1 WHERE id = $2`,
+				newExpiry, cookie.Value)
+
+			claims := &StaffClaims{
+				StaffID:        staffID,
+				OrganizationID: orgID,
+				Role:           role,
+			}
+			ctx := context.WithValue(r.Context(), staffClaimsKey, claims)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+// truncateUA limits user-agent to 512 chars to prevent DB bloat.
+func truncateUA(ua string) string {
+	if len(ua) > 512 {
+		return ua[:512]
+	}
+	return ua
 }
 
 // extractBearer extracts the Bearer token from the Authorization header.

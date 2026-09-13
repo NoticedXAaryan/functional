@@ -141,12 +141,12 @@ func Load() (*Config, error) {
 	}
 	c.AIEnabled = false
 
-	c.StaffAuthMode = strings.ToLower(strings.TrimSpace(envOr("STAFF_AUTH_MODE", "demo")))
-	if c.StaffAuthMode != "demo" && c.StaffAuthMode != "oidc" {
-		return nil, errors.New("STAFF_AUTH_MODE must be demo or oidc")
+	c.StaffAuthMode = strings.ToLower(strings.TrimSpace(envOr("STAFF_AUTH_MODE", "session")))
+	if c.StaffAuthMode != "demo" && c.StaffAuthMode != "oidc" && c.StaffAuthMode != "session" {
+		return nil, errors.New("STAFF_AUTH_MODE must be demo, session, or oidc")
 	}
-	if c.AppMode != AppModeDemo && c.StaffAuthMode != "oidc" {
-		return nil, errors.New("beta and production require STAFF_AUTH_MODE=oidc; local password login is demo-only")
+	if c.AppMode != AppModeDemo && c.StaffAuthMode == "demo" {
+		return nil, errors.New("beta and production must use STAFF_AUTH_MODE=session or oidc; demo login is not allowed")
 	}
 	if c.StaffAuthMode == "oidc" {
 		c.OIDCIssuer = strings.TrimRight(requireEnv("OIDC_ISSUER"), "/")

@@ -9,7 +9,7 @@ self.addEventListener('push', event => {
   if (!/^[a-f0-9-]{36}$/i.test(payload.alert_id || '') || typeof payload.is_test !== 'boolean') return;
   const expiry = Date.parse(payload.expires_at);
   if (!Number.isFinite(expiry) || expiry <= Date.now()) return;
-  const title = payload.is_test ? 'TEST — FICTIONAL · Savera Alert' : 'Savera Alert';
+  const title = payload.is_test ? 'TEST — FICTIONAL · Nithari Alert (Bal Setu)' : 'Nithari Alert · Nearby missing-child alert';
   const body = payload.is_test ? 'Fictional test alert for your chosen area. Open to see current status.' : 'An approved missing-child alert is active in your chosen area. Open for current status.';
   event.waitUntil(self.registration.showNotification(title, {
     body, icon:'/savera.svg', badge:'/savera.svg', tag:'savera-'+payload.alert_id,
