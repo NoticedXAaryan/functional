@@ -4,6 +4,9 @@ import AlertConsole from './AlertConsole';
 import { API_BASE, checkExistingSession, login, logout, staffFetch as fetch } from './auth';
 import type { StaffClaims } from './auth';
 
+// Post-login redirect — set VITE_POST_LOGIN_REDIRECT_URL in apps/ops/.env
+const POST_LOGIN_REDIRECT = (import.meta.env.VITE_POST_LOGIN_REDIRECT_URL ?? '').trim();
+
 interface CaseRow {
   case_id?: string;
   id?: string;
@@ -45,6 +48,8 @@ function App() {
   const [screen, setScreen] = useState<Screen>(staff ? 'cases' : 'login');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  // Shows the post-login redirect banner once after a fresh sign-in.
+  const [showRedirectBanner, setShowRedirectBanner] = useState(false);
 
   // Restore session from HttpOnly cookie on page load.
   useEffect(() => {
@@ -94,6 +99,8 @@ function App() {
       setPassword('');
       setStaff(claims);
       setScreen('cases');
+      // Show redirect banner only on a fresh sign-in (not on session restore).
+      if (POST_LOGIN_REDIRECT) setShowRedirectBanner(true);
     } catch (err: any) {
       setErrorMsg(err.message);
     } finally {
@@ -108,6 +115,7 @@ function App() {
     setSelectedCase(null);
     setMessages([]);
     setScreen('login');
+    setShowRedirectBanner(false);
   };
 
   // ── Fetch case queue ────────────────────────────────────────────────────
@@ -260,6 +268,28 @@ function App() {
       <main className="ops-main">
         {errorMsg && (
           <div className="ops-error">⚠️ {errorMsg}</div>
+        )}
+
+        {/* ── POST-LOGIN REDIRECT BANNER ── */}
+        {showRedirectBanner && POST_LOGIN_REDIRECT && (
+          <div className="ops-redirect-banner" role="status">
+            <span>✅ Signed in successfully.</span>
+            <a
+              href={POST_LOGIN_REDIRECT}
+              className="ops-btn-primary ops-btn-sm"
+              style={{ marginLeft: '1rem' }}
+            >
+              Continue → {POST_LOGIN_REDIRECT}
+            </a>
+            <button
+              className="ops-btn-secondary ops-btn-sm"
+              style={{ marginLeft: '0.5rem' }}
+              onClick={() => setShowRedirectBanner(false)}
+              aria-label="Dismiss redirect banner"
+            >
+              Stay here
+            </button>
+          </div>
         )}
 
         {/* ── LOGIN ── */}
